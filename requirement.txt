@@ -1,0 +1,71 @@
+# =============================================================================
+# Requirements - Dự án Phát hiện Làn đường (Lane Detection)
+# =============================================================================
+# Cài đặt: pip install -r requirements.txt
+# Lưu ý: Đối với PyTorch, nên cài đặt phiên bản phù hợp với CUDA của bạn từ
+# trang chủ: https://pytorch.org/get-started/locally/
+# =============================================================================
+
+# ------- Thư viện học sâu -------
+torch>=1.9.0,<2.5.0                 # PyTorch - framework học sâu chính
+torchvision>=0.10.0,<0.20.0         # Thư viện thị giác máy tính cho PyTorch
+torchaudio>=0.9.0,<2.2.0            # Hỗ trợ audio (phụ thuộc của PyTorch)
+ultralytics>=8.0.0,<8.4.0           # YOLO11 implementation từ Ultralytics
+tensorboard>=2.8.0                  # Trực quan hóa quá trình huấn luyện
+
+# ------- Thư viện xử lý ảnh -------
+opencv-python>=4.5.0,<4.11.0        # OpenCV - xử lý ảnh và video
+opencv-python-headless>=4.5.0       # Phiên bản headless cho môi trường server
+Pillow>=9.0.0,<11.0.0               # Xử lý ảnh Python
+scikit-image>=0.19.0,<0.25.0        # Thuật toán xử lý ảnh nâng cao
+imageio>=2.16.0,<2.37.0             # Đọc/ghi ảnh và video
+
+# ------- Thư viện tính toán khoa học -------
+numpy>=1.21.0,<2.2.0                # Tính toán mảng đa chiều
+scipy>=1.8.0,<1.15.0                # Tính toán khoa học, spline interpolation
+pandas>=1.4.0,<2.3.0                # Xử lý và phân tích dữ liệu dạng bảng
+scikit-learn>=1.1.0,<1.6.0          # Công cụ học máy, đánh giá mô hình
+
+# ------- Thư viện trực quan hóa -------
+matplotlib>=3.5.0,<3.10.0           # Vẽ đồ thị, biểu đồ
+seaborn>=0.11.0,<0.14.0             # Trực quan hóa dữ liệu thống kê
+tqdm>=4.64.0,<4.67.0                # Thanh tiến trình cho vòng lặp
+
+# ------- Thư viện xử lý dữ liệu -------
+pycocotools>=2.0.4                  # Công cụ đánh giá định dạng COCO
+json5>=0.9.6                        # Đọc/ghi JSON nâng cao
+pyyaml>=6.0,<7.0                    # Đọc file cấu hình YAML
+h5py>=3.6.0,<3.13.0                 # Đọc/ghi dữ liệu dạng HDF5
+
+# ------- Công cụ phát triển -------
+jupyter>=1.0.0                      # Jupyter Notebook cho phân tích
+ipython>=8.0.0,<9.0.0               # Interactive Python shell
+jupyterlab>=3.4.0,<5.0.0            # Jupyter Lab interface
+
+# ------- Tiện ích -------
+click>=8.0.0,<8.2.0                 # Tạo command line interface
+python-dotenv>=1.0.0,<2.0.0         # Quản lý biến môi trường
+requests>=2.27.0,<2.33.0            # Gửi HTTP requests (tải dữ liệu)
+gdown>=5.0.0,<6.0.0                 # Tải file từ Google Drive
+albumentations>=1.3.0,<1.5.0        # Tăng cường dữ liệu ảnh
+tabulate>=0.9.0,<0.10.0             # In bảng kết quả đẹp
+colorama>=0.4.5,<0.5.0              # Màu sắc terminal output
+
+# ------- Đánh giá hiệu năng -------
+psutil>=5.9.0,<6.0.0                # Giám sát tài nguyên hệ thống
+speedtest-cli>=2.1.3                # Kiểm tra tốc độ mạng (tùy chọn)
+
+# =============================================================================
+# Lưu ý đặc biệt cho CUDA:
+# =============================================================================
+# Nếu bạn sử dụng GPU với CUDA, hãy cài đặt PyTorch phù hợp, ví dụ:
+#
+# CUDA 11.8:
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+#
+# CUDA 12.1:
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+# CPU only:
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# =============================================================================
