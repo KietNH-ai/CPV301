@@ -1,0 +1,13 @@
+# YOLOv11 Lane Detection Dataset Configuration
+
+# Set the base path to your processed data folder
+path: ../data/processed  
+
+# Define where the training and validation images are (relative to 'path')
+train: train/images  
+val: valid/images  
+
+# Classes (Since we are only detecting lanes, there is 1 class)
+nc: 1
+names:
+  0: lane
