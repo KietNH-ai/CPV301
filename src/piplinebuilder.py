@@ -76,6 +76,8 @@ if __name__ == "__main__":
     print("Pipeline Builder ready.")
     # Example Usage:
     # from src.yolo_detector import YOLOLaneDetector
+    # from src.fitting.spline_fitter import SplineFitter
     # detector = YOLOLaneDetector('weights/yolo11n-seg.pt')
-    # pipeline = PipelineBuilder(detector=detector)
+    # spline_fitter = SplineFitter(spline_order=3, smoothing=3.0)
+    # pipeline = PipelineBuilder(detector=detector, spline_fitter=spline_fitter)
     # pipeline.process_video('my_driving_video.mp4', 'output_result.mp4')

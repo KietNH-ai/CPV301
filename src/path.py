@@ -15,6 +15,7 @@ MODEL_DIR = ROOT_DIR / "model"
 WEIGHTS_DIR = ROOT_DIR / "weights"
 CONFIG_DIR = ROOT_DIR / "config"
 DOCS_DIR = ROOT_DIR / "docs"
+CHECKPOINT_FOR_LLM_DIR = ROOT_DIR / "checkpoint_for_llm"
 
 def ensure_dir(path: Path):
     """Utility to ensure a directory exists."""
@@ -27,3 +28,4 @@ ensure_dir(PROCESSED_DATA_DIR)
 ensure_dir(OUTPUT_DATA_DIR)
 ensure_dir(WEIGHTS_DIR)
 ensure_dir(CONFIG_DIR)
+ensure_dir(CHECKPOINT_FOR_LLM_DIR)
