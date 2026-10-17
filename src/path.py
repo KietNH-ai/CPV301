@@ -29,3 +29,12 @@ ensure_dir(OUTPUT_DATA_DIR)
 ensure_dir(WEIGHTS_DIR)
 ensure_dir(CONFIG_DIR)
 ensure_dir(CHECKPOINT_FOR_LLM_DIR)
+
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).parent.parent.absolute()
+
+print("File hiện tại:", __file__)
+print("Thư mục cha:", Path(__file__).parent)
+print("ROOT_DIR:", ROOT_DIR)
+print("ROOT_DIR tồn tại:", ROOT_DIR.exists())

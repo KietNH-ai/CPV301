@@ -1,4 +1,9 @@
-import cv2
+import cv2,sys
+from pathlib import Path
+#bắt nó về root
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
 from src.path import RAW_DATA_DIR, OUTPUT_DATA_DIR
 
 class PipelineBuilder:

@@ -2,6 +2,12 @@
 Lane Detection Project (CPV301)
 """
 
+import sys
+from pathlib import Path
+#bắt nó về root
+ROOT_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT_DIR))
+
 from src.path import (
     ROOT_DIR,
     DATA_DIR,
