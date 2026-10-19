@@ -22,7 +22,7 @@ from src.path import (
 )
 from src.yolo_detector import YOLOLaneDetector
 from src.fitting.spline_fitter import SplineFitter
-from src.piplinebuilder import PipelineBuilder
+from src.pipelinebuilder import PipelineBuilder
 
 __all__ = [
     "ROOT_DIR",
