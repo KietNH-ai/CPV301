@@ -10,12 +10,12 @@
 torch>=1.9.0,<2.5.0                 # PyTorch - framework học sâu chính
 torchvision>=0.10.0,<0.20.0         # Thư viện thị giác máy tính cho PyTorch
 torchaudio>=0.9.0,<2.2.0            # Hỗ trợ audio (phụ thuộc của PyTorch)
-ultralytics>=8.0.0,<8.4.0           # YOLO11 implementation từ Ultralytics
+ultralytics>=8.3.0                   # YOLO11 cần ultralytics >= 8.3 (bỏ upper bound)
 tensorboard>=2.8.0                  # Trực quan hóa quá trình huấn luyện
 
 # ------- Thư viện xử lý ảnh -------
 opencv-python>=4.5.0,<4.11.0        # OpenCV - xử lý ảnh và video
-opencv-python-headless>=4.5.0       # Phiên bản headless cho môi trường server
+# opencv-python-headless>=4.5.0    # CHỈ dùng trên server không có màn hình; KHÔNG cài cùng opencv-python (xung đột)
 Pillow>=9.0.0,<11.0.0               # Xử lý ảnh Python
 scikit-image>=0.19.0,<0.25.0        # Thuật toán xử lý ảnh nâng cao
 imageio>=2.16.0,<2.37.0             # Đọc/ghi ảnh và video
