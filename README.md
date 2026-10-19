@@ -14,10 +14,10 @@ Dự án môn **CPV301 - Thị giác máy tính** xây dựng pipeline phát hi�
 ## Kiến trúc tổng thể
 
 ```
-┌────────────┐   ┌──────────────┐   ┌─────────────┐   ┌──────────────┐   ┌─────────────┐   ┌────────────┐
-│  Capture   │→  │ Preprocessing│→  │  Detection  │→  │Spline Fitting│→  │   Control   │→  │   Input    │
-│ (mss, ROI) │   │CLAHE+Canny+BEV│   │Hough / YOLO │   │ (scipy spline)│   │PurePursuit+PID│  │ (vgamepad) │
-└────────────┘   └──────────────┘   └─────────────┘   └──────────────┘   └─────────────┘   └────────────┘
+┌────────────┐   ┌───────────────┐   ┌─────────────┐   ┌───────────────┐   ┌───────────────┐   ┌────────────┐
+│  Capture   │→  │ Preprocessing │→  │  Detection  │→  │Spline Fitting │→  │   Control     │→  │   Input    │
+│ (mss, ROI) │   │CLAHE+Canny+BEV│   │Hough / YOLO │   │ (scipy spline)│   │PurePursuit+PID│   │ (vgamepad) │
+└────────────┘   └───────────────┘   └─────────────┘   └───────────────┘   └───────────────┘   └────────────┘
 ```
 
 - **Camera**: Bumper cam (góc nhìn cố định, không rung) → ma trận biến đổi Bird's Eye View (BEV) được hiệu chỉnh cố định một lần.
