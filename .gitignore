@@ -1,6 +1,7 @@
 # Virtual Environment
 cpv.venv/
 venv/
+.venv/
 env/
 ENV/
 
