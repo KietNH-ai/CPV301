@@ -1,255 +1,150 @@
-# 🚗 Phát Hiện Làn Đường Bằng Thị Giác Máy Tính
+# Lane Detection &amp; Self-Driving trong Forza Horizon 4
 
-## 📋 Giới Thiệu Dự Án
+Dự án môn **CPV301 - Thị giác máy tính** xây dựng pipeline phát hiện làn đường và điều khiển xe tự động trong game **Forza Horizon 4**, sử dụng **camera bumper** (góc nhìn cố định gắn trên xe).
 
-Dự án này tập trung vào bài toán **phát hiện làn đường** (Lane Detection) - một thành phần cốt lõi trong hệ thống lái xe tự động và hỗ trợ người lái. Chúng tôi triển khai và so sánh nhiều phương pháp xử lý ảnh khác nhau trên tập dữ liệu **Tusimple**, đồng thời đề xuất một giải pháp tối ưu kết hợp **YOLO11** và **Spline Fitting** để xử lý hiệu quả các đoạn đường cong phức tạp.
+> ⚠️ **Cảnh báo**: Chạy hoàn toàn ở chế độ **offline**. Forza Horizon 4 có anti-cheat; sử dụng phần mềm giả lập tay cầm khi online có thể dẫn đến khóa tài khoản.
 
-## 🎯 Mục Tiêu
+## Mục tiêu
 
-- Triển khai và đánh giá nhiều phương pháp phát hiện làn đường: YOLO11, Spline Fitting, Hough Transform, Lanenet
-- So sánh hiệu năng với nghiên cứu tham khảo **"Lane Detection Using Machine Learning"**
-- Đề xuất giải pháp tối ưu hóa giai đoạn xử lý ảnh
-- Cải thiện độ chính xác trong việc phát hiện làn đường cong, đặc biệt ở các góc cua
+1. Xây dựng pipeline điều khiển xe tự lái trong Forza Horizon 4 theo hướng **modular**:
+   `Chụp màn hình → Tiền xử lý (ROI + BEV + Canny) → Phát hiện làn đường → Khớp spline → Điều khiển (Pure Pursuit + PID) → Gửi lệnh vào game`.
+2. So sánh các phương pháp phát hiện làn đường: **Classic CV (Hough + Spline)** làm phương pháp chính, **YOLO11-seg** làm phương pháp học sâu so sánh.
+3. Đánh giá trên cả tập dữ liệu **TuSimple** (chuẩn学术界) và môi trường thực tế **Forza Horizon 4**.
 
-## 📊 Tập Dữ Liệu: Tusimple
-
-**Tusimple** là một trong những bộ dữ liệu chuẩn cho bài toán phát hiện làn đường, bao gồm:
-- **3,626 video clip** (1 giây mỗi clip, 20 frame/clip)
-- **36,268 frame** tổng cộng
-- **7,000 frame** được chú thích cho huấn luyện
-- **2,000 frame** cho kiểm thử
-- Đặc điểm: Đa dạng điều kiện giao thông, đường cong, đường thẳng, các tình huống che khuất
-
-## 🛠️ Các Phương Pháp Triển Khai
-
-### 1. **YOLO11** (You Only Look Once)
-- Mô hình phát hiện đối tượng hiện đại, tốc độ cao
-- Ưu điểm: Xử lý thời gian thực, độ chính xác tốt
-- Ứng dụng: Phát hiện vùng chứa làn đường như các đối tượng
-
-### 2. **Hough Transform**
-- Phương pháp cổ điển dựa trên biến đổi hình học
-- Ưu điểm: Hiệu quả với đường thẳng, dễ triển khai
-- Hạn chế: Kém hiệu quả với đường cong, nhạy cảm với nhiễu
-
-### 3. **LaneNet**
-- Mạng nơ-ron tích chập đa nhiệm (multi-task)
-- Kiến trúc: Nhánh phân đoạn nhị phân + nhánh nhúng phiên bản
-- Ưu điểm: Xử lý tốt làn đường thay đổi số lượng
-
-### 4. **Spline Fitting**
-- Phương pháp khớp đường cong sử dụng hàm spline
-- Ưu điểm: Xử lý mượt mà các đoạn đường cong
-- Ứng dụng: Tái tạo hình dạng làn đường từ các điểm phát hiện
-
-## 💡 Đề Xuất Tối Ưu: YOLO11 + Spline Fitting
-
-### Vấn Đề Cần Giải Quyết
-Các phương pháp truyền thống như Hough Transform gặp khó khăn lớn với:
-- Đường cong ở góc cua
-- Làn đường có độ cong lớn
-- Tình huống che khuất một phần
-
-### Giải Pháp Đề Xuất
-
-**Giai đoạn 1: Xử Lý Ảnh Tối Ưu**
-- Cân bằng histogram thích ứng (CLAHE) để cải thiện độ tương phản
-- Lọc nhiễu bằng bộ lọc trung vị và Gaussian
-- Phát hiện cạnh bằng Canny với ngưỡng thích ứng
-- Biến đổi góc nhìn (Bird's Eye View) để giảm méo dạng
-
-**Giai đoạn 2: Phát Hiện Với YOLO11**
-- Sử dụng YOLO11 để phát hiện nhanh chóng vùng chứa làn đường
-- Trích xuất các điểm đặc trưng trên làn đường
-- Lọc bỏ các phát hiện sai dựa trên vị trí và hình dạng
-
-**Giai đoạn 3: Khớp Đường Cong Bằng Spline Fitting**
-- Áp dụng **Cubic Spline Interpolation** lên các điểm đã phát hiện
-- Tái tạo hình dạng chính xác của làn đường cong
-- Đảm bảo tính liên tục và mượt mà của đường cong kết quả
-
-### Ưu Điểm Của Giải Pháp
-✅ **Xử lý tốt đường cong**: Spline fitting mô hình hóa chính xác các đoạn cong phức tạp  
-✅ **Tốc độ cao**: YOLO11 đảm bảo khả năng xử lý thời gian thực  
-✅ **Độ bền với nhiễu**: Giai đoạn xử lý ảnh tối ưu giảm tác động của nhiễu  
-✅ **Chính xác cao**: Kết hợp điểm mạnh của cả hai phương pháp  
-
-## 📁 Cấu Trúc Dự Án
+## Kiến trúc tổng thể
 
 ```
-lane-detection-project/
-├── data/
-│   ├── raw/              # Tập dữ liệu Tusimple
-│   ├── processed/             # Dữ liệu sau xử lý
-│   └── output/                # Kết quả đầu ra
-├── models/
-│   ├── yolo11/                # Mô hình YOLO11
-│   ├── lanenet/               # Mô hình LaneNet
-│   └── weights/               # Trọng số đã huấn luyện
+┌────────────┐   ┌──────────────┐   ┌─────────────┐   ┌──────────────┐   ┌─────────────┐   ┌────────────┐
+│  Capture   │→  │ Preprocessing│→  │  Detection  │→  │Spline Fitting│→  │   Control   │→  │   Input    │
+│ (mss, ROI) │   │CLAHE+Canny+BEV│   │Hough / YOLO │   │ (scipy spline)│   │PurePursuit+PID│  │ (vgamepad) │
+└────────────┘   └──────────────┘   └─────────────┘   └──────────────┘   └─────────────┘   └────────────┘
+```
+
+- **Camera**: Bumper cam (góc nhìn cố định, không rung) → ma trận biến đổi Bird's Eye View (BEV) được hiệu chỉnh cố định một lần.
+- **Điều khiển**: Góc lái tính bằng Pure Pursuit từ spline curve; tốc độ điều khiển bằng PID.
+- **Chế độ an toàn**: `main.py` hỗ trợ chế độ `--view-only` (chỉ vẽ làn đường, không gửi lệnh vào game) để test pipeline trước khi điều khiển thật.
+
+## Trạng thái hiện tại
+
+| Module | Trạng thái | Ghi chú |
+|---|---|---|
+| `src/fitting/spline_fitter.py` | ✅ Hoàn thành | Có fallback 3 tầng, có test |
+| `src/yolo_detector.py` | ✅ Hoàn thành | Wrapper YOLO11-seg, làm phương pháp so sánh |
+| `src/pipeline_builder.py` | ✅ Hoàn thành | (đang đổi tên từ `piplinebuilder.py`) |
+| `src/path.py` | ✅ Hoàn thành | Quản lý đường dẫn tập trung |
+| `tests/test_spline_fitter.py` | ✅ Hoàn thành | 7 test case, cover edge case |
+| `docs/` (6 hướng dẫn) | ✅ Hoàn thành | Tài liệu lý thuyết các phương pháp |
+| `src/preprocessing/` (ROI, CLAHE, Canny, BEV) | 🚧 Đang triển khai | Chưa có code, đang refactor từ notebook |
+| `src/detection/hough_transform.py` | 🚧 Đang triển khai | Baseline classic CV |
+| `src/capture/` (mss screen capture) | ⏳ Chưa triển khai | Cần cho chạy trên Forza |
+| `src/control/` (Pure Pursuit + PID) | ⏳ Chưa triển khai | Phần then chốt để điều khiển xe |
+| `src/input/` (vgamepad) | ⏳ Chưa triển khai | Gửi lệnh vào game |
+| `main.py` (vòng lặp điều khiển) | ⏳ Chưa triển khai | Ghép toàn bộ pipeline |
+| Fine-tune YOLO trên ảnh Forza | ⏳ Chưa triển khai | Cần thu thập &amp; label ~500–1000 ảnh game |
+| Kết quả thí nghiệm so sánh | ⏳ Chưa thực hiện | Sẽ cập nhật sau khi chạy |
+
+> **Lưu ý**: LaneNet chỉ được nghiên cứu lý thuyết (trong `docs/05_how_to_use_lanenet.md`) nhưng **không triển khai** do chi phí huấn luyện cao và không cần thiết với môi trường game (đường rõ nét, classic CV đã chạy tốt).
+
+## Cấu trúc thư mục
+
+```
+CPV301/
+├── config/
+│   ├── data.yaml              # Cấu hình dataset YOLO (TuSimple / ảnh Forza)
+│   └── bev.yaml               # ROI + ma trận homography cho bumper cam (đang thêm)
 ├── src/
-│   ├── preprocessing/         # Tiền xử lý ảnh
-│   │   ├── enhance.py         # Cải thiện chất lượng ảnh
-│   │   └── transform.py       # Biến đổi góc nhìn
+│   ├── capture/               # (đang thêm) Chụp màn hình bằng mss, crop ROI
+│   ├── preprocessing/         # (đang thêm) CLAHE, blur, Canny, biến đổi BEV
 │   ├── detection/
-│   │   ├── yolo11_detector.py # YOLO11 implementation
-│   │   ├── hough_transform.py # Hough Transform
-│   │   └── lanenet.py         # LaneNet implementation
+│   │   ├── yolo_detector.py   # YOLO11-seg (phương pháp so sánh)
+│   │   └── hough_transform.py # (đang thêm) Baseline Hough Transform
 │   ├── fitting/
-│   │   └── spline_fitter.py   # Spline Fitting
-│   ├── proposed_method/       # Giải pháp đề xuất
-│   │   └── yolo_spline.py     # YOLO11 + Spline Fitting
-│   └── evaluation/            # Đánh giá hiệu năng
-├── notebooks/                 # Jupyter notebooks phân tích
-├── results/                   # Báo cáo kết quả
-├── requirements.txt           # Thư viện phụ thuộc
-└── README.md                  # File này
+│   │   └── spline_fitter.py   # Khớp B-spline cho làn đường cong
+│   ├── control/               # (đang thêm) Pure Pursuit + PID tốc độ
+│   ├── input/                 # (đang thêm) vgamepad gửi lệnh vào Forza
+│   ├── pipeline_builder.py    # Pipeline xử lý video/frame
+│   └── path.py                # Quản lý đường dẫn
+├── tests/                     # Unit test (pytest)
+├── docs/                      # Tài liệu lý thuyết các phương pháp
+├── data/                      # raw / processed / output (dùng .gitkeep)
+├── notebooks/                 # Notebook phân tích (tham khảo)
+├── main.py                    # (đang thêm) Vòng lặp điều khiển, có --view-only
+├── requirements.txt
+├── pytest.ini
+└── README.md
 ```
 
-## 🚀 Hướng Dẫn Cài Đặt
-
-### Yêu Cầu Hệ Thống
-- Python 3.8+
-- CUDA 11.0+ (để tăng tốc GPU)
-- OpenCV 4.5+
-- PyTorch 1.9+
-
-### Cài Đặt Thư Viện
+## Cài đặt
 
 ```bash
-# Clone repository
-git clone https://github.com/your-team/lane-detection-project.git
-cd lane-detection-project
+# Clone
+git clone https://github.com/KietNH-ai/CPV301.git
+cd CPV301
 
-# Tạo môi trường ảo
+# Tạo môi trường ảo (Python 3.10+)
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# hoặc
-venv\Scripts\activate     # Windows
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Linux/Mac
 
-# Cài đặt phụ thuộc
+# Cài phụ thuộc
 pip install -r requirements.txt
 ```
 
-### Chuẩn Bị Dữ Liệu
+> **PyTorch &amp; CUDA**: Nên cài PyTorch theo phiên bản CUDA của máy từ
+> https://pytorch.org/get-started/locally/ trước khi chạy `pip install -r requirements.txt`.
+>
+> **vgamepad** chỉ hỗ trợ Windows (Forza Horizon 4 cũng chỉ chạy Windows).
 
-```bash
-# Tải tập dữ liệu Tusimple
-# Đặt dữ liệu vào thư mục data/tusimple/
-# Cấu trúc:
-# data/tusimple/
-#   ├── clips/
-#   ├── label_data_*.json
-#   └── test_label.json
-```
+## Sử dụng
 
-## 🎮 Sử Dụng
-
-### Chạy phương pháp đề xuất (YOLO11 + Spline Fitting)
+### 1. Chạy pipeline trên video (không cần game)
 
 ```python
-from src.proposed_method.yolo_spline import LaneDetector
+from src.detection.hough_transform import HoughLaneDetector  # sẵn sàng sau khi thêm
+from src.fitting.spline_fitter import SplineFitter
+from src.pipeline_builder import PipelineBuilder
 
-# Khởi tạo bộ phát hiện
-detector = LaneDetector(
-    yolo_weights='models/weights/yolo11_lane.pt',
-    spline_order=3,
-    confidence_threshold=0.5
-)
-
-# Phát hiện làn đường trên ảnh
-result = detector.detect('data/test_image.jpg')
-result.visualize(save_path='output/result.jpg')
+detector = HoughLaneDetector()
+fitter = SplineFitter(spline_order=3, smoothing=3.0)
+pipeline = PipelineBuilder(detector=detector, spline_fitter=fitter)
+pipeline.process_video('input_video.mp4', 'output_result.mp4')
 ```
 
-### Chạy đánh giá so sánh
+### 2. Chạy tự lái trong Forza Horizon 4 (sắp có)
 
 ```bash
-# Đánh giá tất cả các phương pháp
-python src/evaluation/compare_methods.py \
-    --dataset data/tusimple \
-    --methods yolo11 hough lanenet proposed \
-    --output results/comparison_report.json
+# Chế độ chỉ xem (vẽ làn đường, không gửi lệnh) - an toàn để test
+python main.py --view-only
+
+# Chế độ điều khiển thật (chỉ khi offline!)
+python main.py --control
 ```
 
-### Sử dụng các module riêng lẻ
+### 3. Train/fine-tune YOLO trên ảnh Forza (sắp có)
 
 ```bash
-# Chỉ chạy Hough Transform
-python src/detection/hough_transform.py --input data/sample.jpg
-
-# Chỉ chạy LaneNet
-python src/detection/lanenet.py --input data/sample.jpg
-
-# Chạy Spline Fitting trên các điểm đã có
-python src/fitting/spline_fitter.py --points data/points.json
+yolo detect train data=config/data.yaml model=yolo11n-seg.pt epochs=50 imgsz=640
 ```
 
-## 📈 Kết Quả Đánh Giá
+## Kết quả đánh giá
 
-### Đo Lường Hiệu Năng
-Chúng tôi sử dụng các chỉ số chuẩn của Tusimple benchmark:
+> 🚧 **Đang thực hiện** — sẽ cập nhật sau khi chạy thí nghiệm trên TuSimple và Forza.
 
-| Chỉ số | Mô tả |
-|--------|-------|
-| **Accuracy** | Tỷ lệ điểm phát hiện chính xác |
-| **FP** | False Positive - Số điểm phát hiện sai |
-| **FN** | False Negative - Số điểm bị bỏ sót |
+Các chỉ số đo lường: Accuracy, FP, FN (theo chuẩn TuSimple), FPS, độ trễ end-to-end, và tỷ lệ xe đi đúng làn trong Forza.
 
-### Kết Quả So Sánh Dự Kiến
+## Tài liệu tham khảo
 
-| Phương pháp | Accuracy | FP | FN | Tốc độ (FPS) | Xử lý đường cong |
-|-------------|----------|----|----|--------------|-------------------|
-| Hough Transform | Trung bình | Cao | Trung bình | 30+ | Kém |
-| LaneNet | Tốt | Trung bình | Thấp | ~15 | Tốt |
-| YOLO11 | Tốt | Thấp | Trung bình | ~45 | Trung bình |
-| **YOLO11 + Spline Fitting** | **Rất tốt** | **Thấp** | **Thấp** | **~35** | **Xuất sắc** |
+1. **Tusimple Benchmark**: https://github.com/TuSimple/tusimple-benchmark
+2. **YOLO11 / Ultralytics**: https://docs.ultralytics.com/
+3. **Spline Fitting**: De Boor, C. (2001). *A Practical Guide to Splines*.
+4. **Pure Pursuit**: Coulter, R. C. (1992). *Implementation of the Pure Pursuit Path Tracking Algorithm*.
+5. **LaneNet** (nghiên cứu lý thuyết): Neven, D. et al. (2018). *Towards End-to-End Lane Detection: an Instance Segmentation Approach*.
 
-## 📚 Tài Liệu Tham Khảo
-
-1. **Nghiên cứu so sánh**: *Lane Detection Using Machine Learning*
-2. **Tusimple Dataset**: https://github.com/TuSimple/tusimple-benchmark
-3. **YOLO11**: Phát triển từ YOLO series, tối ưu cho phát hiện đối tượng
-4. **LaneNet**: Neven, D. et al. (2018). "Towards End-to-End Lane Detection: an Instance Segmentation Approach"
-5. **Spline Fitting**: De Boor, C. (2001). "A Practical Guide to Splines"
-
-## 👥 Thành Viên Nhóm
+## Thành viên nhóm
 
 - **Nhóm trưởng**: Nguyễn Hữu Kiệt
-- **Thành viên 1**: Nguyễn Hoàng Phương
-- **Thành viên 2**: Lê Huy Hùng
-- **Thành viên 3**: Nguyễn Thiện Nhân
+- **Thành viên**: Nguyễn Hoàng Phương, Lê Huy Hùng, Nguyễn Thiện Nhân
 
+## Giấy phép
 
-## 📝 Công Việc Đang Thực Hiện
-
-- [x] Nghiên cứu lý thuyết các phương pháp
-- [x] Thu thập và phân tích tập dữ liệu Tusimple
-- [x] Triển khai Hough Transform
-- [x] Triển khai LaneNet
-- [x] Triển khai YOLO11
-- [x] Triển khai Spline Fitting
-- [x] Phát triển giải pháp đề xuất YOLO11 + Spline Fitting
-- [ ] Thực hiện thí nghiệm so sánh
-- [ ] Viết báo cáo chi tiết
-- [ ] Chuẩn bị thuyết trình
-
-## 🤝 Đóng Góp
-
-Mọi đóng góp đều được chào đón! Vui lòng:
-1. Fork repository
-2. Tạo branch tính năng (`git checkout -b feature/AmazingFeature`)
-3. Commit thay đổi (`git commit -m 'Add some AmazingFeature'`)
-4. Push lên branch (`git push origin feature/AmazingFeature`)
-5. Mở Pull Request
-
-## 📄 Giấy Phép
-
-Dự án này được phân phối dưới giấy phép MIT License. Xem file `LICENSE` để biết thêm chi tiết.
-
-## 📞 Liên Hệ
-
-Nếu có câu hỏi hoặc góp ý, vui lòng liên hệ qua email: [your-team-email@example.com]
-
----
-
-⭐ **Nếu dự án hữu ích, hãy cho chúng tôi một sao trên GitHub!** ⭐
+Dự án phân phối theo giấy phép MIT. Xem file `LICENSE`.
