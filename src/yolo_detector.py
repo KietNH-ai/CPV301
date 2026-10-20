@@ -1,16 +1,29 @@
 import cv2
 import numpy as np
-from ultralytics import YOLO
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
+
 
 class YOLOLaneDetector:
-    def __init__(self, model_path='yolo11n-seg.pt'):
+    def __init__(self, model_path='yolo11n-seg.pt', confidence_threshold: float = 0.5):
         """
         Initialize the YOLOv11 instance segmentation model for lane detection.
         
         Args:
             model_path (str): Path to the trained YOLO weights (e.g., 'weights/best.pt').
                               Defaults to the nano segmentation model for quick testing.
+            confidence_threshold (float): Minimum confidence threshold for detections.
         """
+        if YOLO is None:
+            raise ImportError(
+                "The 'ultralytics' package is required for YOLOLaneDetector. "
+                "Install it with: pip install ultralytics"
+            )
+        self.model_path = model_path
+        self.confidence_threshold = confidence_threshold
         self.model = YOLO(model_path)
         
     def detect(self, frame):
@@ -24,14 +37,13 @@ class YOLOLaneDetector:
             results: Raw YOLO results object.
             lane_masks: A list of numpy arrays containing (x,y) coordinates of the lane pixels.
         """
-        # Run YOLO inference
-        results = self.model(frame, verbose=False)
+        results = self.model(frame, conf=self.confidence_threshold, verbose=False)
         
         lane_masks = []
-        if results[0].masks is not None:
-            # Extract polygon points from the segmentation mask
+        if results and results[0].masks is not None:
             for mask in results[0].masks.xy:
-                lane_masks.append(np.array(mask, dtype=np.int32))
+                if len(mask) >= 2:
+                    lane_masks.append(np.array(mask, dtype=np.int32))
                 
         return results, lane_masks
 
@@ -41,5 +53,6 @@ class YOLOLaneDetector:
         (Later, Spline fitting will replace this basic drawing method).
         """
         annotated_frame = frame.copy()
-        cv2.polylines(annotated_frame, lane_masks, isClosed=False, color=(0, 255, 0), thickness=3)
+        if lane_masks:
+            cv2.polylines(annotated_frame, lane_masks, isClosed=False, color=(0, 255, 0), thickness=3)
         return annotated_frame
