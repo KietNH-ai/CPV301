@@ -1,0 +1,20 @@
+{
+  "Hough_Transform": {
+    "accuracy": 0.7931,
+    "fp": 0.0,
+    "fn": 0.0,
+    "fps": 89.25
+  },
+  "LaneNet": {
+    "accuracy": 1.0,
+    "fp": 0.0,
+    "fn": 0.0,
+    "fps": 9.45
+  },
+  "Proposed_Spline": {
+    "accuracy": 1.0,
+    "fp": 0.0,
+    "fn": 0.0,
+    "fps": 9.29
+  }
+}
