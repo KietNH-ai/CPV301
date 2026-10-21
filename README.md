@@ -55,7 +55,6 @@ Dự án môn **CPV301 - Thị giác máy tính** xây dựng pipeline phát hi�
 
 ### 📌 Các điểm cần dọn dẹp (còn lại)
 
-- `docs/06_project_report.md` (dòng bảng module) và `docs/07_user_guide.md` còn vài chỗ ghi tên cũ `piplinebuilder.py` — cần đổi thống nhất thành `pipelinebuilder.py`.
 - `test_fh4/main.py` hiện đang là file rỗng (placeholder), chưa có code vòng lặp điều khiển.
 - `data/` và `fh4_log.csv` **được giữ cố ý** làm dữ liệu mẫu và log chạy thử (không phải vấn đề cần gỡ).
 
