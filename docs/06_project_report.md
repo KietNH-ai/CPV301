@@ -53,7 +53,7 @@ flowchart LR
 | **Phát hiện Học sâu (YOLOv11)** | `src/yolo_detector.py`<br/>`src/detection/yolo11_detector.py` | `YOLOLaneDetector` | Tích hợp mô hình Instance Segmentation `yolo11n-seg.pt` từ thư viện Ultralytics, trích xuất đa giác `masks.xy` của từng làn đường. |
 | **Làm mượt B-Spline (Trọng tâm)** | `src/fitting/spline_fitter.py` | `SplineFitter` | Rút trích đường tâm (`_extract_centerline`) theo từng lát cắt ngang `y_step=4`, khử điểm trùng lặp, nội suy đường cong **B-Spline bậc 3** (`scipy.interpolate.splprep` & `splev`) kèm 2 tầng dự phòng (`np.polyfit` bậc 2 và `np.interp`), vẽ khử răng cưa `cv2.LINE_AA` và tô vùng làn đường di chuyển (`draw_lane_area`). |
 | **Giải pháp Đề xuất** | `src/proposed_method/yolo_spline.py` | `LaneDetector`, `DetectionResult` | Kết hợp toàn diện 3 giai đoạn: Tăng cường ảnh CLAHE $\rightarrow$ Phát hiện phân đoạn $\rightarrow$ Nội suy B-Spline và tô hành lang di chuyển an toàn. |
-| **Điều phối Video & Đánh giá** | `src/piplinebuilder.py`<br/>`src/evaluation/compare_methods.py` | `PipelineBuilder`<br/>`evaluate_lane_predictions()`, `benchmark_detector_on_frames()` | Xử lý video `.mp4` từng khung hình và tính toán bộ chỉ số TuSimple (**Accuracy, FP, FN, FPS**). |
+| **Điều phối Video & Đánh giá** | `src/pipelinebuilder.py`<br/>`src/evaluation/compare_methods.py` | `PipelineBuilder`<br/>`evaluate_lane_predictions()`, `benchmark_detector_on_frames()` | Xử lý video `.mp4` từng khung hình và tính toán bộ chỉ số TuSimple (**Accuracy, FP, FN, FPS**). |
 
 ---
 

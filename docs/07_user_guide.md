@@ -32,8 +32,7 @@ CPV301/
 │   ├── __init__.py                      # Khai báo các class xuất ra của toàn dự án
 │   ├── path.py                          # Quản lý đường dẫn tự động
 │   ├── yolo_detector.py                 # Class YOLOLaneDetector
-│   ├── piplinebuilder.py                # Class PipelineBuilder xử lý video
-│   ├── pipelinebuilder.py               # Alias chống lỗi chính tả khi import
+│   ├── pipelinebuilder.py               # Class PipelineBuilder xử lý video
 │   ├── preprocessing/                   # Gói tiền xử lý (ImagePreprocessor, CLAHE, Bird's Eye View)
 │   ├── detection/                       # Gói phát hiện làn (HoughLaneDetector, LaneNetDetector, YOLO)
 │   ├── fitting/                         # Gói khớp đường cong (SplineFitter)
