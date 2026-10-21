@@ -28,7 +28,7 @@ Phát hiện làn đường (Lane Detection) là một trong những bài toán 
 
 ## 2. Kiến Trúc Hệ Thống & Các Module Đã Hoàn Thành
 
-Dự án được thiết kế theo kiến trúc hướng đối tượng, đóng gói thành các module độc lập trong thư mục `src/` và điều phối thống nhất qua [`PipelineBuilder`](../src/piplinebuilder.py):
+Dự án được thiết kế theo kiến trúc hướng đối tượng, đóng gói thành các module độc lập trong thư mục `src/` và điều phối thống nhất qua [`PipelineBuilder`](../src/pipelinebuilder.py):
 
 ```mermaid
 flowchart LR
