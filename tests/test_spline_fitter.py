@@ -3,7 +3,7 @@ import pytest
 import cv2
 
 from src.fitting.spline_fitter import SplineFitter
-from src.pipelinebuilder import PipelineBuilder
+from src.pipeline_builder import PipelineBuilder
 
 class DummyDetector:
     """Mock detector returning synthetic lane polygon masks for testing."""

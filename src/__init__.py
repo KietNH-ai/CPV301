@@ -42,7 +42,7 @@ from src.fitting.spline_fitter import SplineFitter
 from src.proposed_method.yolo_spline import LaneDetector, DetectionResult
 
 # ---- Điều phối pipeline & đánh giá ----
-from src.pipelinebuilder import PipelineBuilder
+from src.pipeline_builder import PipelineBuilder
 from src.evaluation.compare_methods import (
     evaluate_lane_predictions,
     benchmark_detector_on_frames,

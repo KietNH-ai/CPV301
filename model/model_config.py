@@ -318,7 +318,7 @@ def build_pipeline(
     Với detector_type='proposed', spline fitter để None vì adapter đã tự
     vẽ spline + vùng đi được nội bộ (PipelineBuilder dùng draw_lanes fallback).
     """
-    from src.pipelinebuilder import PipelineBuilder
+    from src.pipeline_builder import PipelineBuilder
 
     detector = build_detector(detector_type, **(detector_cfg or {}))
     if detector_type == "proposed":
