@@ -113,8 +113,8 @@ def main():
     root: Path = args.tusimple_root.resolve()
     out: Path = args.output_dir.resolve()
 
-    if not (root / "clips").is_dir():
-        sys.exit(f"❌ Không tìm thấy {root / 'clips'}. Kiểm tra lại --tusimple_root.")
+    if not (root / "test_set" /"clips").is_dir():
+        sys.exit(f"❌ Không tìm thấy {root / "test_set" /"clips"}. Kiểm tra lại --tusimple_root.")
 
     # 1. Đọc tất cả label, gom theo clip
     samples_by_clip: Dict[str, List[Tuple[Path, dict]]] = {}
