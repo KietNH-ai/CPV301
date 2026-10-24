@@ -41,6 +41,26 @@ class ImagePreprocessor:
         self.roi_bottom_left_x_ratio = roi_bottom_left_x_ratio
         self.roi_bottom_right_x_ratio = roi_bottom_right_x_ratio
         self.roi_bottom_margin_px = roi_bottom_margin_px
+        self._cached_roi_shape: Optional[Tuple[int, int]] = None
+        self._cached_roi_mask: Optional[np.ndarray] = None
+        self._cached_morph_kernel: Optional[np.ndarray] = None
+
+    def _get_cached_roi_mask(self, height: int, width: int) -> np.ndarray:
+        """Return cached binary ROI mask for (height, width) to avoid per-frame fillPoly overhead."""
+        if self._cached_roi_shape != (height, width) or self._cached_roi_mask is None:
+            roi_vertices = self.get_roi_vertices(height, width)
+            mask = np.zeros((height, width), dtype=np.uint8)
+            cv2.fillPoly(mask, roi_vertices, 255)
+            self._cached_roi_shape = (height, width)
+            self._cached_roi_mask = mask
+        return self._cached_roi_mask
+
+    def _get_morph_kernel(self) -> np.ndarray:
+        if self._cached_morph_kernel is None:
+            self._cached_morph_kernel = cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, self.morph_kernel_size
+            )
+        return self._cached_morph_kernel
 
     def to_grayscale(self, frame: np.ndarray) -> np.ndarray:
         """Step 1: Convert BGR image to single-channel grayscale (with optional CLAHE & blur)."""
@@ -82,16 +102,14 @@ class ImagePreprocessor:
     def apply_roi_mask(self, edges: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Step 3: Mask out regions outside the road trapezoid ROI."""
         height, width = edges.shape[:2]
-        roi_vertices = self.get_roi_vertices(height, width)
-        mask = np.zeros_like(edges)
-        cv2.fillPoly(mask, roi_vertices, 255)
+        mask = self._get_cached_roi_mask(height, width)
         roi_edges = cv2.bitwise_and(edges, mask)
         return roi_edges, mask
 
     def connect_edges(self, roi_edges: np.ndarray) -> np.ndarray:
         """Step 4: Connect nearby edge pixels using morphological closing."""
-        lane_mask = (roi_edges > 0).astype(np.uint8) * 255
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, self.morph_kernel_size)
+        lane_mask = roi_edges if roi_edges.dtype == np.uint8 else (roi_edges > 0).astype(np.uint8) * 255
+        kernel = self._get_morph_kernel()
         connected_mask = cv2.morphologyEx(
             lane_mask,
             cv2.MORPH_CLOSE,
@@ -112,12 +130,11 @@ class ImagePreprocessor:
         Returns:
             connected_mask (np.ndarray) or Tuple[np.ndarray, Dict[str, np.ndarray]].
         """
-        gray = self.to_grayscale(frame)
-        edges = self.detect_edges(gray)
-        roi_edges, roi_mask = self.apply_roi_mask(edges)
-        connected_mask = self.connect_edges(roi_edges)
-
         if return_steps:
+            gray = self.to_grayscale(frame)
+            edges = self.detect_edges(gray)
+            roi_edges, roi_mask = self.apply_roi_mask(edges)
+            connected_mask = self.connect_edges(roi_edges)
             steps = {
                 "gray": gray,
                 "edges": edges,
@@ -127,6 +144,20 @@ class ImagePreprocessor:
             }
             return connected_mask, steps
 
+        # Fast path for real-time (>= 30 FPS): only process the road ROI band [top_y:bottom_y]
+        height, width = frame.shape[:2]
+        top_y = max(0, int(height * self.roi_top_y_ratio))
+        bottom_y = max(top_y + 1, height - self.roi_bottom_margin_px)
+        roi_mask = self._get_cached_roi_mask(height, width)
+
+        band_frame = frame[top_y:bottom_y, :]
+        band_gray = self.to_grayscale(band_frame)
+        band_edges = self.detect_edges(band_gray)
+        band_roi_edges = cv2.bitwise_and(band_edges, roi_mask[top_y:bottom_y, :])
+        band_connected = self.connect_edges(band_roi_edges)
+
+        connected_mask = np.zeros((height, width), dtype=np.uint8)
+        connected_mask[top_y:bottom_y, :] = band_connected
         return connected_mask
 
     @staticmethod

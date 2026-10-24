@@ -1,9 +1,21 @@
 """
 tusimple_to_yolo.py — Chuyển dataset TuSimple sang định dạng YOLOv8/11 segmentation.
 
-Đầu vào (TuSimple train set):
+Đầu vào (hỗ trợ tự động nhận diện cả 2 cấu trúc thư mục TuSimple):
+  Cách 1 (trỏ vào thư mục gốc `data/raw/TUSimple`):
     <tusimple_root>/
-        clips/0313-1/20/20.jpg   (và các clip 0531*, 0601*)
+        train_set/
+            clips/0313-1/20/20.jpg   (và các clip 0531*, 0601*)
+            label_data_0313.json
+            label_data_0531.json
+            label_data_0601.json
+        test_set/
+            clips/...
+        test_label.json
+
+  Cách 2 (trỏ trực tiếp vào `train_set/`):
+    <tusimple_root>/
+        clips/0313-1/20/20.jpg
         label_data_0313.json
         label_data_0531.json
         label_data_0601.json
@@ -13,14 +25,10 @@ tusimple_to_yolo.py — Chuyển dataset TuSimple sang định dạng YOLOv8/11 
         train/images/  train/labels/
         valid/images/  valid/labels/
 
-Mỗi làn đường (lane) được vẽ thành dải line dày trên mask nhị phân, sau đó lấy
-contour làm polygon segmentation. Chia train/val theo CLIP (không theo ảnh) để
-tránh leak: cùng một clip không nằm đồng thời ở hai tập.
-
 Usage:
-    python scripts/tusimple_to_yolo.py \
-        --tusimple_root data/external/tusimple \
-        --output_dir data/processed \
+    python -m src.tusimple_to_yolo \
+        --tusimple_root data/raw/TUSimple \
+        --output_dir data/processing \
         --val_ratio 0.1
 """
 from __future__ import annotations
@@ -31,11 +39,15 @@ import random
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
 
 # Đảm bảo import được src khi chạy script trực tiếp
 _ROOT = Path(__file__).resolve().parent.parent
@@ -96,56 +108,79 @@ def clip_id_of(raw_file: str) -> str:
     return str(Path(raw_file).parent)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--tusimple_root", required=True, type=Path,
-                    help="Thư mục gốc TuSimple chứa clips/ và label_data_*.json")
-    ap.add_argument("--output_dir", type=Path, default=_ROOT / "data" / "processed",
-                    help="Thư mục đầu ra (mặc định: data/processed)")
-    ap.add_argument("--val_ratio", type=float, default=0.1,
-                    help="Tỷ lệ validation (theo clip)")
-    ap.add_argument("--lane_thickness", type=int, default=12,
-                    help="Độ dày (px) khi vẽ làn thành mask")
-    ap.add_argument("--seed", type=int, default=42)
-    args = ap.parse_args()
+def resolve_tusimple_data_dir(root: Path) -> Tuple[Path, List[Path]]:
+    """
+    Tự động tìm thư mục chứa `clips/` và danh sách các file JSON label
+    tương ứng dù người dùng truyền `TUSimple`, `TUSimple/train_set`, hay `TUSimple/test_set`.
+    """
+    candidates = [
+        root,
+        root / "train_set",
+        root / "test_set",
+    ]
+    for cand in candidates:
+        if (cand / "clips").is_dir():
+            label_paths = [cand / lf for lf in LABEL_FILES if (cand / lf).exists()]
+            if not label_paths and (root / "test_label.json").exists():
+                label_paths = [root / "test_label.json"]
+            elif not label_paths and (cand / "test_label.json").exists():
+                label_paths = [cand / "test_label.json"]
+            if label_paths:
+                return cand, label_paths
 
-    random.seed(args.seed)
-    root: Path = args.tusimple_root.resolve()
-    out: Path = args.output_dir.resolve()
+    clips_Check = root / "train_set" / "clips"
+    sys.exit(
+        f"❌ Không tìm thấy thư mục clips và label JSON trong '{root}' "
+        f"(hoặc '{clips_Check}'). Kiểm tra lại --tusimple_root."
+    )
 
-    if not (root / "test_set" /"clips").is_dir():
-        sys.exit(f"❌ Không tìm thấy {root / "test_set" /"clips"}. Kiểm tra lại --tusimple_root.")
+
+def convert_tusimple_to_yolo(
+    tusimple_root: Path,
+    output_dir: Path,
+    val_ratio: float = 0.1,
+    lane_thickness: int = 12,
+    seed: int = 42,
+    max_clips: Optional[int] = None,
+) -> dict:
+    random.seed(seed)
+    root = Path(tusimple_root).resolve()
+    out = Path(output_dir).resolve()
+
+    data_root, label_paths = resolve_tusimple_data_dir(root)
+    print(f"📂 Đọc dữ liệu TuSimple từ: {data_root}")
 
     # 1. Đọc tất cả label, gom theo clip
     samples_by_clip: Dict[str, List[Tuple[Path, dict]]] = {}
-    for lf in LABEL_FILES:
-        lf_path = root / lf
-        if not lf_path.exists():
-            print(f"⚠️  Bỏ qua (không tồn tại): {lf_path}")
-            continue
+    for lf_path in label_paths:
         with open(lf_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 rec = json.loads(line)
-                img_path = root / rec["raw_file"]
+                img_path = data_root / rec["raw_file"]
                 cid = clip_id_of(rec["raw_file"])
                 samples_by_clip.setdefault(cid, []).append((img_path, rec))
 
     clip_ids = sorted(samples_by_clip.keys())
     random.shuffle(clip_ids)
-    n_val = max(1, int(len(clip_ids) * args.val_ratio))
+    if max_clips is not None and max_clips > 0:
+        clip_ids = clip_ids[:max_clips]
+
+    n_val = max(1, int(len(clip_ids) * val_ratio)) if len(clip_ids) > 1 else 0
     val_clips = set(clip_ids[:n_val])
-    print(f"📦 Tổng clip: {len(clip_ids)} | val: {len(val_clips)} | train: {len(clip_ids) - len(val_clips)}")
+    print(f"📦 Tổng clip xử lý: {len(clip_ids)} | val: {len(val_clips)} | train: {len(clip_ids) - len(val_clips)}")
 
     # 2. Tạo thư mục đầu ra
     for split in ("train", "valid"):
         (out / split / "images").mkdir(parents=True, exist_ok=True)
         (out / split / "labels").mkdir(parents=True, exist_ok=True)
 
-    stats = {"train": {"imgs": 0, "polys": 0, "skipped": 0},
-             "valid": {"imgs": 0, "polys": 0, "skipped": 0}}
+    stats = {
+        "train": {"imgs": 0, "polys": 0, "skipped": 0},
+        "valid": {"imgs": 0, "polys": 0, "skipped": 0},
+    }
 
     for cid in tqdm(clip_ids, desc="Chuyển đổi", unit="clip"):
         split = "valid" if cid in val_clips else "train"
@@ -159,15 +194,17 @@ def main():
                 continue
             img_h, img_w = img.shape[:2]
             polygons = lane_to_polygons(
-                rec["lanes"], rec["h_samples"], img_h, img_w,
-                thickness=args.lane_thickness,
+                rec["lanes"],
+                rec["h_samples"],
+                img_h,
+                img_w,
+                thickness=lane_thickness,
             )
             if not polygons:
                 stats[split]["skipped"] += 1
                 continue
 
-            name = img_path.name  # 20.jpg — đổi tên tránh đụng độ giữa các clip
-            stem = cid.replace("/", "_").replace("\\", "_")  # clips_0313-1_20
+            stem = cid.replace("/", "_").replace("\\", "_")
             out_name = f"{stem}_{img_path.stem}"
 
             shutil.copy2(img_path, out / split / "images" / f"{out_name}.jpg")
@@ -182,7 +219,52 @@ def main():
     for split, s in stats.items():
         print(f"   {split:5s}: {s['imgs']:4d} ảnh | {s['polys']:5d} polygon | bỏ qua {s['skipped']}")
     print(f"\n📂 Đầu ra: {out}")
-    print("👉 Tiếp theo: chỉnh config/data.yaml (path=../data/processed) rồi chạy train.")
+    print("👉 Tiếp theo: kiểm tra config/data.yaml (path=../data/processed) rồi chạy train.")
+    return stats
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--tusimple_root",
+        required=True,
+        type=Path,
+        help="Thư mục gốc TuSimple (vd: data/raw/TUSimple hoặc data/raw/TUSimple/train_set)",
+    )
+    ap.add_argument(
+        "--output_dir",
+        type=Path,
+        default=_ROOT / "data" / "processing",
+        help="Thư mục đầu ra (mặc định: data/processing)",
+    )
+    ap.add_argument(
+        "--val_ratio",
+        type=float,
+        default=0.1,
+        help="Tỷ lệ validation (theo clip)",
+    )
+    ap.add_argument(
+        "--lane_thickness",
+        type=int,
+        default=12,
+        help="Độ dày (px) khi vẽ làn thành mask",
+    )
+    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument(
+        "--max_clips",
+        type=int,
+        default=None,
+        help="Giới hạn số lượng clip chuyển đổi (dùng khi muốn tạo tập mẫu nhanh)",
+    )
+    args = ap.parse_args(argv)
+    convert_tusimple_to_yolo(
+        tusimple_root=args.tusimple_root,
+        output_dir=args.output_dir,
+        val_ratio=args.val_ratio,
+        lane_thickness=args.lane_thickness,
+        seed=args.seed,
+        max_clips=args.max_clips,
+    )
 
 
 if __name__ == "__main__":

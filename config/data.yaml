@@ -1,11 +1,11 @@
 # YOLOv11 Lane Detection Dataset Configuration
 
-# Set the base path to your processed data folder
-path: ../data/processed  
+# Set the base path to your processing data folder (populated by 01_pre_processing.ipynb / tusimple_to_yolo.py)
+path: H:/FPT/4/CPV/project/CPV301/data/processing
 
 # Define where the training and validation images are (relative to 'path')
-train: train/images  
-val: valid/images  
+train: train/images
+val: valid/images
 
 # Classes (Since we are only detecting lanes, there is 1 class)
 nc: 1

@@ -1,200 +1,135 @@
-# Lane Detection & Self-Driving trong Forza Horizon 4
+# Lane Detection & UK Autonomous Navigation trong Forza Horizon 4
 
-Dự án môn **CPV301 - Thị giác máy tính** xây dựng pipeline phát hiện làn đường và điều khiển xe tự động trong game **Forza Horizon 4**, sử dụng **camera bumper** (góc nhìn cố định gắn trên xe).
+Dự án môn **CPV301 - Thị giác máy tính** xây dựng hệ thống phát hiện làn đường, phân tích bản đồ toàn cục và điều khiển xe tự hành theo **luật giao thông Vương Quốc Anh (UK Left-Hand Traffic - đi bên trái)** trong game **Forza Horizon 4**, sử dụng **camera bumper** kết hợp tọa độ thực thời gian thực từ **UDP Telemetry (`fh4_telemetry.py`)**.
 
 > ⚠️ **Cảnh báo**: Chạy hoàn toàn ở chế độ **offline**. Forza Horizon 4 có anti-cheat; sử dụng phần mềm giả lập tay cầm khi online có thể dẫn đến khóa tài khoản.
+>
+> 📖 **Tài liệu giải thích chi tiết kiến trúc & các nâng cấp mới nhất**: Xem [`docs/explain.md`](docs/explain.md).
 
 ## Mục tiêu
 
-1. Xây dựng pipeline điều khiển xe tự lái trong Forza Horizon 4 theo hướng **modular**:
-   `Chụp màn hình → Tiền xử lý (ROI + BEV + Canny) → Phát hiện làn đường → Khớp spline → Điều khiển (Pure Pursuit + PID) → Gửi lệnh vào game`.
-2. So sánh các phương pháp phát hiện làn đường: **Classic CV (Hough + Spline)** làm phương pháp chính, **YOLO11-seg** làm phương pháp học sâu so sánh, **LaneNet** (phiên bản cổ điển) làm baseline thứ ba.
-3. Đánh giá trên cả tập dữ liệu **TuSimple** (chuẩn học thuật) và môi trường thực tế **Forza Horizon 4**.
+1. **Phân tích bản đồ `fh4_map` & Định tuyến điểm đến (A\*)**:
+   - Đọc bản đồ Forza Horizon 4 từ `fh4_map/raw/`, trích xuất mặt nạ đường giao thông, làm mảnh khung xương (Skeletonization) và lập đồ thị mạng lưới đường (`RoadNode`, `RoadEdge`) lưu vào `fh4_map/processing/`.
+   - Cho phép người dùng **đánh dấu điểm đến trên bản đồ** (click chuột trực tiếp với `--pick-dest`, chọn nút giao `--dest-node`, tọa độ ảnh `--dest-pixel` hoặc tọa độ thế giới `--dest-world`).
+   - Kết hợp lộ trình A* với tọa độ thực (`PositionX`, `PositionY`, `PositionZ`, `Yaw`) từ `fh4_telemetry.py` và **phân loại làn đường chuẩn nước Anh (đi làn bên trái, vào bùng binh theo chiều kim đồng hồ)** để tự lái đến đích.
+2. **Chuẩn hóa luồng dữ liệu qua các Notebook**:
+   - `notebooks/01_pre_processing.ipynb`: Tiền xử lý nâng cao 6 bước (CLAHE + Gaussian Blur + Canny + HLS White/Yellow Mask + UK ROI + B-Spline + Phân loại làn trái UK) và xuất toàn bộ ảnh & bộ dữ liệu YOLO-seg vào **`data/processing/`**.
+   - `notebooks/02_train.ipynb`: Huấn luyện YOLO11-seg bằng ảnh trong **`data/processing/`** và xuất trọng số (`best.pt`), ảnh dự đoán cùng báo cáo đánh giá vào **`data/output/`**.
+3. **Tổng hợp toàn bộ Biểu đồ (`.png`) và Bảng số liệu (`.csv`) ngay tại thư mục gốc (`ROOT_DIR`)**:
+   - Tất cả các file số liệu CSV và biểu đồ phân tích của Bản đồ, Tiền xử lý, Huấn luyện, Đánh giá và Điều khiển đều được xuất trực tiếp ra thư mục gốc của dự án để dễ dàng kiểm tra và đưa vào báo cáo.
 
 ## Kiến trúc tổng thể
 
 ```
-┌────────────┐   ┌───────────────┐   ┌─────────────┐   ┌───────────────┐   ┌───────────────┐   ┌────────────┐
-│  Capture   │→  │ Preprocessing │→  │  Detection  │→  │Spline Fitting │→  │   Control     │→  │   Input    │
-│ (mss, ROI) │   │CLAHE+Canny+BEV│   │Hough/YOLO/  │   │ (scipy spline)│   │PurePursuit+PID│   │ (vgamepad) │
-└────────────┘   └───────────────┘   │   LaneNet   │   └───────────────┘   └───────────────┘   └────────────┘
-                                     └─────────────┘
+┌──────────────────┐     ┌────────────────────┐     ┌──────────────────────┐
+│   fh4_map/raw    │ ──► │ fh4_map/processing │ ──► │  A* Route Navigator  │
+│  (Bản đồ FH4 UK) │     │ (Road Graph + CSV) │     │ (Điểm đến + Hướng rẽ)│
+└──────────────────┘     └────────────────────┘     └──────────┬───────────┘
+                                                               │
+┌────────────┐   ┌───────────────┐   ┌─────────────┐   ┌───────▼───────┐   ┌───────────────┐   ┌────────────┐
+│  Capture   │─► │ Preprocessing │─► │  Detection  │─► │UK Left-Hand   │─► │Control Fusion │─► │   Input    │
+│ (mss, ROI) │   │data/processing│   │Hough/YOLO/  │   │Spline & Lane  │   │PurePursuit+PID│   │ (vgamepad) │
+└────────────┘   └───────────────┘   │   LaneNet   │   │Classification │   │+fh4_telemetry │   └────────────┘
+                                     └─────────────┘   └───────────────┘   └───────────────┘
 ```
-
-- **Camera**: Bumper cam (góc nhìn cố định, không rung) → ma trận biến đổi Bird's Eye View (BEV) được hiệu chỉnh cố định một lần (hiện đang hardcode mặc định trong `src/preprocessing/transform.py`).
-- **Điều khiển**: Góc lái tính bằng Pure Pursuit từ spline curve; tốc độ điều khiển bằng PID. Logic điều khiển độc lập đã có trong `test_fh4/`, **chưa tích hợp vào `src/`**.
-- **Chế độ an toàn**: `main.py` (vòng lặp điều khiển, hỗ trợ `--view-only`) **đang chờ triển khai**.
 
 ## Trạng thái hiện tại
 
 | Module | Trạng thái | Ghi chú |
 |---|---|---|
-| `src/preprocessing/` (ROI, CLAHE, Canny, BEV) | ✅ Hoàn thành | `preprocessor.py` (grayscale+CLAHE+blur → Canny → ROI → morph closing), `enhance.py`, `transform.py` (BEV warp/unwarp) |
-| `src/detection/hough_transform.py` | ✅ Hoàn thành | HoughLinesP + gom cụm trái/phải + fit đường thẳng, có CLI chạy ảnh |
-| `src/detection/lanenet.py` | ✅ Hoàn thành (phiên bản cổ điển) | Binary segmentation + DBSCAN instance clustering + fit đa thức (không dùng NN đã huấn luyện), có CLI |
-| `src/yolo_detector.py` + `src/detection/yolo11_detector.py` | ✅ Hoàn thành | Wrapper YOLO11-seg (ultralytics), làm phương pháp so sánh |
-| `src/fitting/spline_fitter.py` | ✅ Hoàn thành | B-spline với 3 cấp fallback, có test |
-| `src/proposed_method/yolo_spline.py` | ✅ Hoàn thành | Phương pháp đề xuất: Enhance (CLAHE+denoise) + YOLO11-seg + Spline; API `LaneDetector` / `DetectionResult.visualize()` |
-| `src/evaluation/compare_methods.py` | ✅ Hoàn thành | Metric theo chuẩn TuSimple (Accuracy / FP / FN) + đo FPS, có CLI xuất JSON |
-| `src/pipelinebuilder.py` | ✅ Hoàn thành | Xử lý video frame-by-frame (đã gỡ bản class trùng) |
-| `src/__init__.py` | ✅ Hoàn thành | Public API thống nhất, `__all__` khớp 100% với import thật |
-| `src/path.py` | ✅ Hoàn thành | Quản lý đường dẫn tập trung, tự tạo thư mục |
-| `model/demo.py` | ✅ Hoàn thành | Chạy so sánh 3 phương pháp trên ảnh mẫu, xuất lưới so sánh + `comparison_report.json` |
-| `test_fh4/` (FH4_controler.py + fh4_telemetry.py) | ✅ Hoàn thành (độc lập) | Đọc gói telemetry UDP của FH4 + tính lái/tăng ga/phanh + gửi lệnh qua virtual gamepad/keyboard + ghi CSV; **chưa nối với pipeline `src/`** |
-| `tests/` (pytest) | ✅ Hoàn thành | `test_spline_fitter.py`, `test_preprocessing_and_hough.py` (đã sửa import) |
-| `docs/` | ✅ Hoàn thành | 8 tài liệu `00`–`07` (hướng dẫn lý thuyết + project report + user guide) |
-| `data/output/` (kết quả sơ bộ) | ✅ Có | Ảnh so sánh từng bước, video output, `comparison_report.json` |
-| `src/capture/` (mss screen capture) | ⏳ Chưa triển khai | Cần để chạy thật trên Forza |
-| Tích hợp `src/control/` + `src/input/` | ⏳ Chưa tích hợp | Logic đã có trong `test_fh4/`, cần chuyển vào `src/` và nối với pipeline thị giác |
-| `main.py` (vòng lặp điều khiển, `--view-only` / `--control`) | ⏳ Chưa triển khai | Ghép toàn bộ pipeline + capture + control (`test_fh4/main.py` mới là placeholder rỗng) |
-| `config/bev.yaml` | ⏳ Chưa có | Tham số BEV đang để mặc định hardcode trong `transform.py` |
-| Fine-tune YOLO trên ảnh Forza | ⏳ Chưa thực hiện | Cần thu thập & label ~500–1000 ảnh game |
-| Đánh giá đầy đủ trên TuSimple + Forza | ⏳ Chưa thực hiện | Mới có kết quả sơ bộ trên ảnh mẫu (xem mục Kết quả đánh giá) |
+| `fh4_map/` (`raw/` & `processing/`) | ✅ Hoàn thành | Chứa bản đồ gốc `fh4_uk_map.png`, mặt nạ đường `road_mask.png`, khung xương `road_skeleton.png`, đồ thị `road_graph_overlay.png`, `planned_route_map.png` |
+| `src/map/` (`map_analyzer.py`, `navigator.py`) | ✅ Hoàn thành | Trích xuất đồ thị đường đi, chọn điểm đến tương tác/CLI, định tuyến A* theo luật giao thông Anh (LHT) |
+| `src/preprocessing/` (`batch_processor.py`, `preprocessor.py`, `enhance.py`, `transform.py`) | ✅ Hoàn thành | Pipeline 6 bước + xuất ảnh/nhãn sang `data/processing/` + xuất CSV & biểu đồ ra Root |
+| `src/control/` (`pure_pursuit.py`, `pid.py`, `controller.py`, `telemetry.py`) | ✅ Hoàn thành | Phân loại làn đường UK (`classify_uk_lanes`), hợp nhất Vision + Map A* (`vision+map_uk`), tự động dừng khi tới đích |
+| `test_fh4/fh4_telemetry.py` & `FH4_controler.py` | ✅ Hoàn thành | Giải mã gói UDP 324 bytes kèm tọa độ 3D (`PositionX`, `PositionY`, `PositionZ`, `Yaw`, `Pitch`, `Roll`) |
+| `notebooks/01_pre_processing.ipynb` | ✅ Hoàn thành | Tiền xử lý nâng cao 6 bước & xuất dữ liệu vào `data/processing/` + CSV/biểu đồ ở Root |
+| `notebooks/02_train.ipynb` | ✅ Hoàn thành | Huấn luyện YOLO11-seg từ `data/processing/` & xuất ra `data/output/` + CSV/biểu đồ ở Root |
+| `tests/` (pytest) | ✅ Hoàn thành | 21/21 unit tests PASSED |
 
-> **Lưu ý về LaneNet**: Đã triển khai dưới dạng **phiên bản cổ điển** (binary segmentation theo gradient + phân cụm DBSCAN, không huấn luyện mạng nơ-ron) để làm baseline so sánh trong `model/demo.py`. Phiên bản end-to-end dựa trên học sâu chưa triển khai do chi phí huấn luyện cao và không cần thiết với môi trường game (đường rõ nét, classic CV đã chạy tốt).
+## Danh sách Biểu đồ (`.png`) và Bảng số liệu (`.csv`) tại Thư mục gốc (`ROOT_DIR`)
 
-### 📌 Các điểm cần dọn dẹp (còn lại)
-
-- `test_fh4/main.py` hiện đang là file rỗng (placeholder), chưa có code vòng lặp điều khiển.
-- `data/` và `fh4_log.csv` **được giữ cố ý** làm dữ liệu mẫu và log chạy thử (không phải vấn đề cần gỡ).
+| Tên file tại Root | Loại | Mô tả nội dung |
+|---|---|---|
+| `fh4_map_road_graph.csv` | CSV | Danh sách các đoạn đường (`RoadEdge`), nút giao (`RoadNode`), giới hạn tốc độ và làn UK trên bản đồ FH4 |
+| `fh4_route_waypoints.csv` | CSV | Lộ trình A* chi tiết từng mốc tọa độ `(world_x, world_z)`, góc hướng và chỉ dẫn làn trái UK tới điểm đến |
+| `fh4_map_route_chart.png` | Biểu đồ | Biểu đồ 3-panel: Bản đồ gốc FH4 (`fh4_map/raw`), Lộ trình A* (`fh4_map/processing`), và Hồ sơ tốc độ theo quãng đường |
+| `preprocessing_metrics.csv` | CSV | Số liệu thống kê tiền xử lý từng ảnh mẫu (số làn phát hiện, loại làn UK, pixel biên/màu trong ROI, góc lệch, độ cong, thời gian xử lý) |
+| `preprocessing_pipeline_chart.png` | Biểu đồ | Biểu đồ 6 bước tiền xử lý ảnh mặt đường và phân loại làn trái UK |
+| `training_results.csv` | CSV | Lịch sử huấn luyện YOLO11-seg qua các epoch (`box_loss`, `seg_loss`, `mAP50`, `mAP50-95`) trên `data/processing/` |
+| `evaluation_metrics.csv` | CSV | Bảng so sánh Accuracy, FP, FN, FPS giữa các phương pháp (`Hough_Transform`, `LaneNet`, `Proposed_Spline`) |
+| `training_and_evaluation_chart.png` | Biểu đồ | Biểu đồ so sánh độ chính xác/FPS và đường cong hội tụ hàm mất mát huấn luyện |
+| `fh4_log.csv` | CSV | Nhật ký điều khiển tự hành thời gian thực kèm tọa độ xe (`position_x`, `position_z`), loại làn UK và khoảng cách tới đích |
 
 ## Cấu trúc thư mục
 
 ```
 CPV301/
+├── fh4_map/                       # ✅ Thư mục bản đồ Forza Horizon 4 (Vương Quốc Anh)
+│   ├── raw/                       # Bản đồ gốc (fh4_uk_map.png)
+│   └── processing/                # Mặt nạ đường, khung xương, đồ thị & bản đồ lộ trình A*
 ├── config/
-│   └── data.yaml                  # Cấu hình dataset YOLO (1 class: lane)
-│   # bev.yaml                     # (chưa có) tham số BEV đang hardcode trong transform.py
+│   ├── data.yaml                  # ✅ Cấu hình dataset YOLO trỏ vào data/processing
+│   └── bev.yaml                   # ✅ Cấu hình Bird's Eye View (default, fh4_bumper, tusimple)
 ├── src/
-│   ├── preprocessing/             # ✅ enhance.py, preprocessor.py, transform.py (BEV)
-│   ├── detection/                 # ✅ hough_transform.py, lanenet.py, yolo11_detector.py (re-export)
+│   ├── map/                       # ✅ map_analyzer.py, navigator.py (Đồ thị bản đồ & Định tuyến A* UK)
+│   ├── capture/                   # ✅ screen_capture.py (mss screen capture)
+│   ├── preprocessing/             # ✅ batch_processor.py, enhance.py, preprocessor.py, transform.py
+│   ├── detection/                 # ✅ hough_transform.py, lanenet.py, yolo11_detector.py
 │   ├── fitting/                   # ✅ spline_fitter.py (B-spline, 3 cấp fallback)
 │   ├── proposed_method/           # ✅ yolo_spline.py (Enhance + YOLO11 + Spline)
-│   ├── evaluation/                # ✅ compare_methods.py (metric TuSimple + FPS)
-│   ├── yolo_detector.py           # ✅ Wrapper YOLO11-seg
-│   ├── spline_fitter.py           # ✅ shortcut re-export
-│   ├── pipelinebuilder.py         # ✅ Xử lý video (tên thống nhất)
-│   ├── __init__.py                # ✅ Public API thống nhất
+│   ├── control/                   # ✅ pure_pursuit.py (UK LHT), pid.py, controller.py, telemetry.py
+│   ├── input/                     # ✅ actuator.py (vgamepad / keyboard / dry_run)
+│   ├── evaluation/                # ✅ compare_methods.py, train_and_export.py
 │   └── path.py                    # ✅ Quản lý đường dẫn tập trung
-│   # capture/                     # (chưa có) mss screen capture
-│   # control/ , input/            # (chưa tích hợp vào src) — logic nằm trong test_fh4/
-├── test_fh4/                      # ✅ Độc lập: fh4_telemetry.py (UDP) + FH4_controler.py (điều khiển + gamepad/keyboard)
-│   └── main.py                    # (placeholder rỗng) vòng lặp điều khiển, đang chờ viết
-├── model/
-│   └── demo.py                    # ✅ Chạy so sánh 3 phương pháp, xuất grid + comparison_report.json
-├── tests/                         # ✅ pytest: test_spline_fitter.py, test_preprocessing_and_hough.py
-├── notebooks/                     # 4 notebook tham khảo (preprocessing, train, demo)
-├── docs/                          # ✅ 8 tài liệu 00–07 (hướng dẫn + project report + user guide)
 ├── data/
-│   ├── raw/                       # ảnh mẫu + test_driving.mp4
-│   ├── processed/
-│   └── output/                    # ✅ kết quả sơ bộ: ảnh so sánh, video, comparison_report.json
-├── checkpoint_for_llm/            # Checkpoint cho agent (theo AGENTS.md)
-├── fh4_log.csv                    # Log chạy thử controller (giữ lại để test)
-├── main.py                        # (chưa có ở root) vòng lặp điều khiển --view-only / --control
-├── requirements.txt
-├── pytest.ini
-├── AGENTS.md / GEMINI.md          # Quy tắc làm việc với LLM/agent (token budget + checkpoint)
-├── LICENSE
-└── README.md
+│   ├── raw/                       # Ảnh gốc + test_driving.mp4 + TUSimple/
+│   ├── processing/                # ✅ Ảnh đã tiền xử lý + tập train/valid YOLO-seg (từ 01_pre_processing.ipynb)
+│   └── output/                    # ✅ Trọng số best.pt, ảnh dự đoán & báo cáo (từ 02_train.ipynb)
+├── notebooks/
+│   ├── 01_pre_processing.ipynb    # ✅ Tiền xử lý nâng cao -> xuất ra data/processing/ & Root
+│   └── 02_train.ipynb             # ✅ Train trên data/processing/ -> xuất ra data/output/ & Root
+├── docs/
+│   └── explain.md                 # ✅ Giải thích chi tiết toàn bộ hệ thống & nâng cấp
+├── fh4_map_road_graph.csv         # ✅ [Root CSV] Đồ thị mạng lưới đường FH4
+├── fh4_route_waypoints.csv        # ✅ [Root CSV] Lộ trình A* tới điểm đến
+├── fh4_map_route_chart.png        # ✅ [Root Chart] Biểu đồ lộ trình bản đồ FH4 UK
+├── preprocessing_metrics.csv      # ✅ [Root CSV] Số liệu tiền xử lý ảnh
+├── preprocessing_pipeline_chart.png # ✅ [Root Chart] Biểu đồ 6 bước tiền xử lý
+├── training_results.csv           # ✅ [Root CSV] Kết quả huấn luyện YOLO11-seg
+├── evaluation_metrics.csv         # ✅ [Root CSV] Bảng đánh giá các phương pháp
+├── training_and_evaluation_chart.png # ✅ [Root Chart] Biểu đồ huấn luyện & đánh giá
+├── fh4_log.csv                    # ✅ [Root CSV] Nhật ký điều khiển tự hành
+└── main.py                        # ✅ Vòng lặp tự hành trung tâm tích hợp Bản đồ + Làn trái UK
 ```
 
-## Cài đặt
+## Sử dụng nhanh
 
+### 1. Chạy tiền xử lý (`data/raw` -> `data/processing` + Root CSV/Chart)
+Mở và chạy `notebooks/01_pre_processing.ipynb` hoặc chạy lệnh:
 ```bash
-# Clone
-git clone https://github.com/KietNH-ai/CPV301.git
-cd CPV301
-
-# Tạo môi trường ảo (Python 3.10+)
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/Mac
-
-# Cài phụ thuộc
-pip install -r requirements.txt
+python -m src.preprocessing.batch_processor
 ```
 
-> **PyTorch & CUDA**: Nên cài PyTorch theo phiên bản CUDA của máy từ
-> https://pytorch.org/get-started/locally/ trước khi chạy `pip install -r requirements.txt`.
->
-> **vgamepad** chỉ hỗ trợ Windows (Forza Horizon 4 cũng chỉ chạy Windows).
-
-## Sử dụng
-
-### 1. Chạy pipeline trên video (không cần game)
-
-```python
-from src.detection.hough_transform import HoughLaneDetector
-from src.fitting.spline_fitter import SplineFitter
-from src.pipelinebuilder import PipelineBuilder
-
-detector = HoughLaneDetector()
-fitter = SplineFitter(spline_order=3, smoothing=3.0)
-pipeline = PipelineBuilder(detector=detector, spline_fitter=fitter)
-pipeline.process_video('test_driving.mp4', 'output_result.mp4')
-```
-
-### 2. Phương pháp đề xuất (Enhance + YOLO11-seg + Spline)
-
-```python
-from src.proposed_method.yolo_spline import LaneDetector
-
-detector = LaneDetector(yolo_weights='yolo11n-seg.pt', spline_order=3, confidence_threshold=0.5)
-result = detector.detect('data/raw/20.jpg')
-result.visualize(save_path='data/output/result.jpg')
-```
-
-### 3. Chạy demo so sánh 3 phương pháp (Hough / LaneNet / Proposed)
-
+### 2. Chạy huấn luyện & đánh giá (`data/processing` -> `data/output` + Root CSV/Chart)
+Mở và chạy `notebooks/02_train.ipynb` hoặc chạy lệnh:
 ```bash
-python model/demo.py
-# Hoặc xuất báo cáo đánh giá dạng JSON:
-python -m src.evaluation.compare_methods --methods hough lanenet proposed --output data/output/comparison_report.json
+python -m src.evaluation.train_and_export
 ```
 
-Kết quả được lưu vào `data/output/` (ảnh so sánh từng bước, video, `comparison_grid.jpg`, `comparison_report.json`).
-
-### 4. Chạy tự lái trong Forza Horizon 4 (chưa có)
-
-`main.py` với chế độ `--view-only` / `--control` **đang chờ triển khai**. Hiện tại phần điều khiển xe chạy độc lập trong `test_fh4/`:
-
+### 3. Chạy hệ thống tự lái kết hợp Bản đồ `fh4_map`, Điểm đến & Làn đường Vương Quốc Anh (`main.py`)
 ```bash
-# Đọc telemetry + điều khiển (chỉ Windows, chỉ chạy offline!)
-python test_fh4/FH4_controler.py
+# A. Mở bản đồ FH4 để click chuột chọn điểm đến trực tiếp, sau đó chạy tự lái:
+python main.py --control --detector hough --pick-dest
+
+# B. Đánh dấu điểm đến bằng mã nút giao (ví dụ Node 12: Edinburgh City Centre) ở chế độ mô phỏng video:
+python main.py --view-only --detector hough --dest-node 12 --video data/raw/test_driving.mp4 --save data/output/fh4_sim_viewonly.mp4
+
+# C. Đánh dấu điểm đến bằng tọa độ pixel (U, V) hoặc tọa độ thế giới (PositionX, PositionZ):
+python main.py --view-only --detector hough --dest-pixel 850 130
+python main.py --view-only --detector hough --dest-world 2900 4180
 ```
 
-### 5. Train/fine-tune YOLO trên ảnh Forza (chưa thực hiện)
-
+### 4. Chạy bộ kiểm thử tự động (21 Unit Tests)
 ```bash
-yolo detect train data=config/data.yaml model=yolo11n-seg.pt epochs=50 imgsz=640
+pytest -v
 ```
-
-## Kết quả đánh giá
-
-> ✅ **Đã có kết quả sơ bộ** trên ảnh mẫu trong `data/raw/` (sample nhỏ, **chưa phải** benchmark đầy đủ trên TuSimple hay Forza). File gốc: `data/output/comparison_report.json`.
-
-| Phương pháp | Accuracy | FP | FN | FPS |
-|---|---|---|---|---|
-| Hough Transform | 0.7931 | 0.0 | 0.0 | 89.25 |
-| LaneNet (phiên bản cổ điển) | 1.0000 | 0.0 | 0.0 | 9.45 |
-| Proposed (YOLO11 + Spline) | 1.0000 | 0.0 | 0.0 | 9.29 |
-
-> ⚠️ Accuracy = 1.0 của LaneNet và Proposed chỉ phản ánh ảnh mẫu đơn giản; cần đánh giá lại trên tập lớn hơn. Các chỉ số đầy đủ sẽ cập nhật sau khi chạy thí nghiệm trên TuSimple và Forza (Accuracy, FP, FN theo chuẩn TuSimple, FPS, độ trễ end-to-end, tỷ lệ xe đi đúng làn trong Forza).
-
-## Tài liệu tham khảo
-
-1. **Tusimple Benchmark**: https://github.com/TuSimple/tusimple-benchmark
-2. **YOLO11 / Ultralytics**: https://docs.ultralytics.com/
-3. **Spline Fitting**: De Boor, C. (2001). *A Practical Guide to Splines*.
-4. **Pure Pursuit**: Coulter, R. C. (1992). *Implementation of the Pure Pursuit Path Tracking Algorithm*.
-5. **LaneNet** (nghiên cứu lý thuyết + triển khai phiên bản cổ điển): Neven, D. et al. (2018). *Towards End-to-End Lane Detection: An Instance Segmentation Approach*.
-
-## Thành viên nhóm
-
-- **Nhóm trưởng**: Nguyễn Hữu Kiệt
-- **Thành viên**: Nguyễn Hoàng Phương, Lê Huy Hùng, Nguyễn Thiện Nhân
-
-## Giấy phép
-
-Dự án phân phối theo giấy phép MIT. Xem file `LICENSE`.

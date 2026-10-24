@@ -129,6 +129,7 @@ class PathData:
     curvature: Optional[float] = None
     centerline: Optional[list] = None
     target_speed_kmh: Optional[float] = None
+    uk_lane_type: str = "unknown"
 
 
 @dataclass
@@ -141,6 +142,9 @@ class MapData:
     heading_error_rad: Optional[float] = None
     target_speed_kmh: Optional[float] = None
     waypoint: Optional[tuple[float, float]] = None
+    distance_to_goal_m: Optional[float] = None
+    turn_hint: str = "straight"
+    uk_instruction: str = ""
 
 
 @dataclass
@@ -156,6 +160,9 @@ class VehicleState:
     heading: Optional[float] = None
     yaw_rate: Optional[float] = None
     vehicle_type: Optional[str] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    position_z: Optional[float] = None
 
 
 @dataclass
@@ -711,6 +718,21 @@ class FH4AutonomousController:
                     packet,
                     "VehicleType",
                     "vehicle_type",
+                ),
+                position_x=self._get_field(
+                    packet,
+                    "PositionX",
+                    "position_x",
+                ),
+                position_y=self._get_field(
+                    packet,
+                    "PositionY",
+                    "position_y",
+                ),
+                position_z=self._get_field(
+                    packet,
+                    "PositionZ",
+                    "position_z",
                 ),
             )
 

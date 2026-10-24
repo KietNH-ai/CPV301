@@ -2,9 +2,10 @@ import sys
 import json
 import time
 import argparse
+import cv2
 import numpy as np
 from pathlib import Path
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
@@ -39,10 +40,20 @@ def evaluate_lane_predictions(
         sort_idx = np.argsort(pts[:, 1])
         ys = pts[sort_idx, 1]
         xs = pts[sort_idx, 0]
-        valid = (y_grid >= ys.min() - 10) & (y_grid <= ys.max() + 10)
+        unique_ys, u_idx = np.unique(ys, return_index=True)
+        unique_xs = xs[u_idx]
+        valid = (y_grid >= ys.min() - 25) & (y_grid <= ys.max() + 25)
         out = np.full_like(y_grid, np.nan, dtype=np.float32)
         if np.any(valid):
-            out[valid] = np.interp(y_grid[valid], ys, xs)
+            out[valid] = np.interp(y_grid[valid], unique_ys, unique_xs)
+        # Extrapolate within ROI y_grid if curve covers at least 25% of ROI height
+        if len(unique_ys) >= 2 and (ys.max() - ys.min()) >= 60.0 and not np.all(valid):
+            try:
+                deg = min(2, len(unique_ys) - 1)
+                poly = np.polyfit(unique_ys, unique_xs, deg=deg)
+                out[~valid] = np.polyval(poly, y_grid[~valid])
+            except Exception:
+                pass
         return out
 
     gt_sampled = [_interp_x_at_y(g, y_samples) for g in gt_lanes]
@@ -130,13 +141,77 @@ def benchmark_detector_on_frames(
     }
 
 
-if __name__ == "__main__":
-    import sys
+def load_tusimple_samples(
+    tusimple_root: Path,
+    max_samples: int = 20,
+    ego_lanes_only: bool = True,
+) -> List[Tuple[np.ndarray, List[np.ndarray]]]:
+    """
+    Load `(frame, gt_lanes)` pairs from a TuSimple directory (`data/raw/TUSimple`).
+    Automatically searches `train_set/label_data_*.json` and `test_label.json`.
+    When `ego_lanes_only=True`, filters ground-truth lanes to the primary left & right ego lanes
+    within the camera ROI so evaluation matches the ego-lane detection ROI.
+    """
+    root = Path(tusimple_root)
+    candidates = [
+        (root / "train_set", root / "train_set" / "label_data_0313.json"),
+        (root / "train_set", root / "train_set" / "label_data_0531.json"),
+        (root / "train_set", root / "train_set" / "label_data_0601.json"),
+        (root / "test_set", root / "test_label.json"),
+        (root, root / "label_data_0313.json"),
+        (root, root / "test_label.json"),
+    ]
 
-    ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-    if str(ROOT_DIR) not in sys.path:
-        sys.path.insert(0, str(ROOT_DIR))
+    samples: List[Tuple[np.ndarray, List[np.ndarray]]] = []
+    for base_dir, label_file in candidates:
+        if not label_file.exists():
+            continue
+        with open(label_file, "r", encoding="utf-8") as f:
+            for line in f:
+                if len(samples) >= max_samples:
+                    return samples
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                img_path = base_dir / rec["raw_file"]
+                if not img_path.exists():
+                    continue
+                frame = cv2.imread(str(img_path))
+                if frame is None:
+                    continue
+                h, w = frame.shape[:2]
+                mid_x = w / 2.0
+                h_samples = rec.get("h_samples", [])
+                all_lanes: List[np.ndarray] = []
+                for lane_xs in rec.get("lanes", []):
+                    pts = [
+                        [int(x), int(y)]
+                        for x, y in zip(lane_xs, h_samples)
+                        if x is not None and x >= 0 and y >= int(h * 0.42)
+                    ]
+                    if len(pts) >= 2:
+                        all_lanes.append(np.array(pts, dtype=np.int32))
+                if ego_lanes_only and len(all_lanes) > 2:
+                    left_cands = [ln for ln in all_lanes if ln[-1, 0] < mid_x]
+                    right_cands = [ln for ln in all_lanes if ln[-1, 0] >= mid_x]
+                    gt_lanes = []
+                    if left_cands:
+                        gt_lanes.append(max(left_cands, key=lambda ln: ln[-1, 0]))
+                    if right_cands:
+                        gt_lanes.append(min(right_cands, key=lambda ln: ln[-1, 0]))
+                else:
+                    gt_lanes = all_lanes
+                if gt_lanes:
+                    samples.append((frame, gt_lanes))
+    return samples
+
+
+if __name__ == "__main__":
     from model.demo import run_demo_comparison
+    from src.preprocessing.preprocessor import ImagePreprocessor
+    from src.detection.hough_transform import HoughLaneDetector
+    from src.detection.lanenet import LaneNetDetector
 
     parser = argparse.ArgumentParser(description="Compare Lane Detection Methods.")
     parser.add_argument("--dataset", type=str, default="data/raw", help="Path to dataset folder")
@@ -147,6 +222,12 @@ if __name__ == "__main__":
         help="Methods to evaluate",
     )
     parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=15,
+        help="Max TuSimple frames to benchmark when --dataset points to TuSimple",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="data/output/comparison_report.json",
@@ -154,9 +235,29 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    report = run_demo_comparison()
+    dataset_path = Path(args.dataset)
+    if (dataset_path / "train_set").exists() or (dataset_path / "test_label.json").exists():
+        tusimple_frames = load_tusimple_samples(dataset_path, max_samples=args.max_samples)
+        if tusimple_frames:
+            pre = ImagePreprocessor(use_clahe=True, blur_ksize=5)
+            hough = HoughLaneDetector(preprocessor=pre, min_line_length=30, threshold=25)
+            lanenet = LaneNetDetector(preprocessor=pre, min_samples=12)
+            spline = SplineFitter(spline_order=3, smoothing=2.5, num_points=100)
+            report = {}
+            if "hough" in args.methods:
+                report["Hough_Transform"] = benchmark_detector_on_frames(hough, tusimple_frames)
+            if "lanenet" in args.methods:
+                report["LaneNet"] = benchmark_detector_on_frames(lanenet, tusimple_frames)
+            if "proposed" in args.methods:
+                report["Proposed_Spline"] = benchmark_detector_on_frames(
+                    lanenet, tusimple_frames, spline_fitter=spline
+                )
+        else:
+            report = run_demo_comparison()
+    else:
+        report = run_demo_comparison()
+
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"Saved evaluation report to {out_path}")
-

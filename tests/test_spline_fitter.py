@@ -1,5 +1,8 @@
 import numpy as np
-import pytest
+try:
+    import pytest
+except ImportError:
+    pytest = None
 import cv2
 
 from src.fitting.spline_fitter import SplineFitter

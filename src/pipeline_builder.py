@@ -1,10 +1,11 @@
 import cv2
 import sys
 from pathlib import Path
+from typing import List, Any
 
-# bắt nó về root
 ROOT_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT_DIR))
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from src.path import RAW_DATA_DIR, OUTPUT_DATA_DIR
 
@@ -14,50 +15,57 @@ class PipelineBuilder:
         """
         Builds the Lane Detection Pipeline, allowing you to easily swap methods
         (like YOLO, LaneNet, or Hough Transform) for research comparison.
-
-        Args:
-            detector: The lane detection model (e.g., YOLOLaneDetector).
-            spline_fitter: The post-processing spline curve fitter.
         """
         self.detector = detector
         self.spline_fitter = spline_fitter
+        self.last_results: Any = None
+        self.last_masks: List[Any] = []
+        self.last_fitted_curves: List[Any] = []
 
     def process_frame(self, frame):
         """
         Xử lý 1 frame: detect -> (spline fit) -> trả về frame đã chú thích.
-        Dùng chung cho process_video() và vòng lặp thời gian thực (FH4 view-only / control).
+        Lưu lại `self.last_masks` và `self.last_fitted_curves` để vòng lặp điều khiển
+        (Pure Pursuit / HUD) tái sử dụng mà không cần chạy detect hay spline fit lần 2.
         """
         masks = []
+        results = None
         if self.detector:
-            # YOLO outputs bounding boxes/masks; Hough/LaneNet trả (lines, masks)
             results, masks = self.detector.detect(frame)
 
-        # Step 2: Post-processing (Spline Fitting)
+        self.last_results = results
+        self.last_masks = masks or []
+
         if self.spline_fitter and masks:
-            # Smooth the lane and draw it
+            self.last_fitted_curves = self.spline_fitter.fit_multiple_lanes(masks)
+            if hasattr(self.spline_fitter, "draw_fitted_curves"):
+                return self.spline_fitter.draw_fitted_curves(frame, self.last_fitted_curves)
             return self.spline_fitter.fit_and_draw(frame, masks)
+
+        self.last_fitted_curves = self.last_masks
         if self.detector and masks:
-            # Fallback: detector tự vẽ (ví dụ proposed method đã vẽ spline + vùng đi được nội bộ)
             return self.detector.draw_lanes(frame, masks)
-        return frame
+        return frame.copy()
 
     def process_video(self, input_filename, output_filename):
-        """
-        Reads a video, runs detection & fitting on each frame, and saves the output.
-        """
-        input_path = RAW_DATA_DIR / input_filename
-        output_path = OUTPUT_DATA_DIR / output_filename
+        """Reads a video, runs detection & fitting on each frame, and saves the output."""
+        input_path = Path(input_filename)
+        if not input_path.is_absolute() and not input_path.exists():
+            input_path = RAW_DATA_DIR / input_filename
+        output_path = Path(output_filename)
+        if not output_path.is_absolute() and output_path.parent == Path("."):
+            output_path = OUTPUT_DATA_DIR / output_filename
+
         if not input_path.exists():
             raise FileNotFoundError(f"Cannot find input video: {input_path}")
         cap = cv2.VideoCapture(str(input_path))
 
-        # Get video properties for saving the output
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30
 
-        # Using mp4v codec for standard mp4 video files
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
         print(f"Starting pipeline processing for {input_filename}...")
 
@@ -80,10 +88,3 @@ class PipelineBuilder:
 
 if __name__ == "__main__":
     print("Pipeline Builder ready.")
-    # Example Usage:
-    # from src.yolo_detector import YOLOLaneDetector
-    # from src.fitting.spline_fitter import SplineFitter
-    # detector = YOLOLaneDetector('weights/yolo11n-seg.pt')
-    # spline_fitter = SplineFitter(spline_order=3, smoothing=3.0)
-    # pipeline = PipelineBuilder(detector=detector, spline_fitter=spline_fitter)
-    # pipeline.process_video('my_driving_video.mp4', 'output_result.mp4')

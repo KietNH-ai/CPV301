@@ -16,7 +16,7 @@ tensorboard>=2.14.0                # xem tiến trình train YOLO
 
 # ------- Xử lý ảnh & thị giác -------
 opencv-python>=4.8.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 Pillow>=10.0.0
 scipy>=1.10.0                      # splprep / splev cho spline fitting
 scikit-image>=0.21.0               # các thuật toán xử lý ảnh bổ trợ

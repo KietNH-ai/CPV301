@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
-import pytest
+try:
+    import pytest
+except ImportError:
+    pytest = None
 
 from src import (
     ImagePreprocessor,

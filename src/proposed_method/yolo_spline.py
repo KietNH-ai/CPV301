@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 from src.yolo_detector import YOLOLaneDetector
+from src.detection.hough_transform import HoughLaneDetector
 from src.fitting.spline_fitter import SplineFitter
 from src.preprocessing.enhance import apply_clahe, denoise_image
 
@@ -67,6 +68,7 @@ class LaneDetector:
             smoothing=smoothing,
         )
         self._detector = detector
+        self._hough_fallback: Optional[HoughLaneDetector] = None
 
     @property
     def detector(self):
@@ -87,7 +89,21 @@ class LaneDetector:
     def detect_frame(self, frame: np.ndarray) -> DetectionResult:
         """Run Stage 1 (Enhance) -> Stage 2 (YOLO11) -> Stage 3 (Spline Fitting) on a BGR frame."""
         proc_frame = self.preprocess_frame(frame)
-        _, raw_masks = self.detector.detect(proc_frame)
+        raw_masks = []
+        try:
+            _, raw_masks = self.detector.detect(proc_frame)
+        except Exception:
+            raw_masks = []
+
+        if len(raw_masks) < 2:
+            if self._hough_fallback is None:
+                self._hough_fallback = HoughLaneDetector()
+            _, hough_masks = self._hough_fallback.detect(frame)
+            if hough_masks:
+                if not raw_masks:
+                    raw_masks = hough_masks
+                else:
+                    raw_masks = list(raw_masks) + [m for m in hough_masks if len(raw_masks) < 2]
         fitted_curves = self.spline_fitter.fit_multiple_lanes(raw_masks)
         annotated = self.spline_fitter.fit_and_draw(frame, raw_masks)
 

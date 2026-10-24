@@ -1,10 +1,10 @@
-
 """
 Forza Horizon 4 Telemetry Module.
 
 Receives FH4 UDP Data Out packets.
-Parses the complete packet layout and exposes only the fields
-needed by the driving controller.
+Parses the complete packet layout and exposes vehicle state, speed,
+drivetrain, and 3D world coordinates (PositionX/Y/Z, Yaw/Pitch/Roll)
+needed by the autonomous driving controller and UK Map Navigator.
 """
 
 import socket
@@ -145,7 +145,7 @@ EXPECTED_PARSED_BYTES = sum(
 
 
 def decode_fh4_packet(data: bytes) -> Dict[str, Any]:
-    """Decode the complete FH4 packet and return selected fields."""
+    """Decode the complete FH4 packet and return selected fields (including 3D coordinates & orientation)."""
 
     if len(data) < EXPECTED_PARSED_BYTES:
         raise ValueError(
@@ -172,12 +172,11 @@ def decode_fh4_packet(data: bytes) -> Dict[str, Any]:
 
         offset += size
 
-    # Convert only the fields required by the controller.
+    # Convert only the fields required by the controller and map navigator.
     speed_mps = float(raw["Speed"])
     gear_raw = int(raw["Gear"])
     drivetrain_type = int(raw["DrivetrainType"])
 
-    # Keep the raw FH4 gear value as well as its display label.
     if gear_raw == 0:
         gear_label = "R"
     else:
@@ -202,6 +201,18 @@ def decode_fh4_packet(data: bytes) -> Dict[str, Any]:
         "Drivetrain": drivetrain_map.get(
             drivetrain_type, "Unknown"
         ),
+        "PositionX": float(raw["PositionX"]),
+        "PositionY": float(raw["PositionY"]),
+        "PositionZ": float(raw["PositionZ"]),
+        "Yaw": float(raw["Yaw"]),
+        "Pitch": float(raw["Pitch"]),
+        "Roll": float(raw["Roll"]),
+        "VelocityX": float(raw["VelocityX"]),
+        "VelocityY": float(raw["VelocityY"]),
+        "VelocityZ": float(raw["VelocityZ"]),
+        "AngularVelocityY": float(raw["AngularVelocityY"]),
+        "NormalizedDrivingLine": int(raw["NormalizedDrivingLine"]),
+        "NormalizedAIBrakeDifference": int(raw["NormalizedAIBrakeDifference"]),
     }
 
 
@@ -423,10 +434,10 @@ def run_diagnostic() -> None:
                 print(
                     f"\r[{status:10s}] "
                     f"Speed: {packet['SpeedKmh']:6.1f} km/h | "
-                    f"RPM: {packet['CurrentEngineRpm']:6.0f} | "
+                    f"Pos: ({packet['PositionX']:7.1f}, {packet['PositionZ']:7.1f}) | "
+                    f"Yaw: {packet['Yaw']:+5.2f} | "
                     f"Gear: {packet['Gear']:>2s} | "
                     f"Steer: {packet['Steer']:4d} | "
-                    f"Drive: {packet['Drivetrain']:>7s} | "
                     f"Packets: {receiver.packet_count:6d} | "
                     f"Age: {age:.2f}s   ",
                     end="",

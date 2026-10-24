@@ -8,7 +8,7 @@ except ImportError:
 
 
 class YOLOLaneDetector:
-    def __init__(self, model_path='yolo11n-seg.pt', confidence_threshold: float = 0.5):
+    def __init__(self, model_path='yolo11m-seg.pt', confidence_threshold: float = 0.5):
         """
         Initialize the YOLOv11 instance segmentation model for lane detection.
         

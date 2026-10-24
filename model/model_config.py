@@ -46,7 +46,7 @@ try:
         )
     )
 except Exception as e:  # pragma: no cover - phụ thuộc môi trường
-    print(f"⚠️ Không thể import PyTorch, dùng CPU: {e}")
+    pass
 
 
 # ===========================================================================

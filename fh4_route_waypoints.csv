@@ -1,0 +1,5 @@
+step,node_id,label,x_px,y_px,world_x,world_z,road_class,uk_lane,uk_instruction,heading_rad,target_speed_kmh,cumulative_distance_m
+0,9,M68 Astmoor Interchange,1007,713,3231.15,-1912.35,motorway,left_lane_uk,KEEP_LEFT_LANE_UK,-0.56564,180.0,2510.6
+1,10,M68 Moorhead Roundabout,781,357,1129.35,1398.45,primary_uk,left_lane_uk,ROUNDABOUT_CLOCKWISE_KEEP_LEFT,0.3727,90.0,6614.7
+2,11,Edinburgh West Gate,833,224,1612.95,2635.35,primary_uk,left_lane_uk,TURN_RIGHT_CROSS_TRAFFIC_TO_UK_LEFT_LANE,0.92215,65.0,8063.6
+3,12,Edinburgh City Centre,895,177,2189.55,3072.45,primary_uk,left_lane_uk,ARRIVED_PULL_OVER_LEFT,0.92215,0.0,8844.5

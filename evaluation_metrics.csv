@@ -1,0 +1,4 @@
+method,dataset_source,uk_traffic_mode,accuracy,fp,fn,fps
+Hough_Transform,data/processing,left_hand_traffic,0.5,0.0,0.3333,6.56
+LaneNet,data/processing,left_hand_traffic,0.7889,0.3333,0.3333,7.7
+Proposed_Spline,data/processing,left_hand_traffic,1.0,0.0,0.0,8.32

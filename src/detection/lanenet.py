@@ -2,7 +2,10 @@ import sys
 from pathlib import Path
 import cv2
 import numpy as np
-from sklearn.cluster import DBSCAN
+try:
+    from sklearn.cluster import DBSCAN
+except ImportError:
+    DBSCAN = None
 from typing import List, Tuple, Optional, Dict
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -90,6 +93,17 @@ class LaneNetDetector:
         feat_x = (projected_base_x / float(width)) + side_feature
         feat_y = (ys / float(height)) * 0.18
         embeddings = np.column_stack((feat_x, feat_y))
+
+        if DBSCAN is None:
+            # Thuật toán gom cụm dự phòng khi chưa cài scikit-learn (phân nhóm theo trục chiếu đáy đường)
+            left_mask = xs < vp_x
+            right_mask = xs >= vp_x
+            clusters_fb = []
+            for m in (left_mask, right_mask):
+                if np.sum(m) >= max(3, self.min_samples):
+                    pts = np.column_stack((xs[m], ys[m]))
+                    clusters_fb.append((len(pts), pts))
+            return [pts for _, pts in clusters_fb[: self.max_lanes]]
 
         clustering = DBSCAN(eps=self.eps, min_samples=self.min_samples).fit(embeddings)
         labels = clustering.labels_

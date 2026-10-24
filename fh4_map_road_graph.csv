@@ -1,0 +1,33 @@
+edge_id,from_node_id,from_label,to_node_id,to_label,road_class,uk_driving_side,speed_limit_kmh,length_px,length_m
+0,8,M68 South Roundabout,9,M68 Astmoor Interchange,motorway,left,180.0,302.4,2812.28
+1,9,M68 Astmoor Interchange,10,M68 Moorhead Roundabout,motorway,left,180.0,441.3,4104.1
+2,10,M68 Moorhead Roundabout,7,M68 North Roundabout,motorway,left,170.0,172.83,1607.29
+3,7,M68 North Roundabout,11,Edinburgh West Gate,primary_uk,left,85.0,133.0,1236.92
+4,10,M68 Moorhead Roundabout,11,Edinburgh West Gate,primary_uk,left,90.0,155.8,1448.95
+5,11,Edinburgh West Gate,12,Edinburgh City Centre,primary_uk,left,65.0,83.97,780.94
+6,12,Edinburgh City Centre,13,Arthur's Seat North,primary_uk,left,70.0,185.42,1724.44
+7,13,Arthur's Seat North,14,Bamburgh Castle Coast,primary_uk,left,85.0,600.22,5582.03
+8,10,M68 Moorhead Roundabout,18,Greendale Airstrip,primary_uk,left,85.0,386.94,3598.53
+9,18,Greendale Airstrip,14,Bamburgh Castle Coast,primary_uk,left,80.0,262.11,2437.66
+10,14,Bamburgh Castle Coast,9,M68 Astmoor Interchange,primary_uk,left,85.0,276.16,2568.26
+11,14,Bamburgh Castle Coast,8,M68 South Roundabout,primary_uk,left,80.0,581.6,5408.86
+12,8,M68 South Roundabout,16,Ashbrook & Uffington,primary_uk,left,90.0,323.11,3004.95
+13,16,Ashbrook & Uffington,15,Broadway Village,primary_uk,left,75.0,144.25,1341.54
+14,15,Broadway Village,0,Horizon Festival Site,primary_uk,left,80.0,385.48,3584.99
+15,0,Horizon Festival Site,16,Ashbrook & Uffington,primary_uk,left,85.0,381.48,3547.78
+16,0,Horizon Festival Site,1,Ambleside Village,secondary_uk,left,65.0,387.65,3605.14
+17,0,Horizon Festival Site,2,Tarn Hows Junction,secondary_uk,left,65.0,400.19,3721.77
+18,1,Ambleside Village,2,Tarn Hows Junction,secondary_uk,left,60.0,212.96,1980.56
+19,1,Ambleside Village,3,Derwentwater West,primary_uk,left,75.0,250.26,2327.39
+20,3,Derwentwater West,5,Mortimer Gardens,primary_uk,left,70.0,349.79,3253.08
+21,5,Mortimer Gardens,6,Glen Rannoch Pass,secondary_uk,left,65.0,452.67,4209.79
+22,6,Glen Rannoch Pass,7,M68 North Roundabout,primary_uk,left,75.0,276.69,2573.23
+23,5,Mortimer Gardens,17,Derwent North Bridge,primary_uk,left,75.0,322.74,3001.5
+24,17,Derwent North Bridge,7,M68 North Roundabout,primary_uk,left,80.0,390.11,3627.98
+25,17,Derwent North Bridge,4,Lakehurst Forest,primary_uk,left,75.0,408.87,3802.45
+26,17,Derwent North Bridge,19,Derwent South Shore,primary_uk,left,75.0,390.63,3632.88
+27,1,Ambleside Village,19,Derwent South Shore,primary_uk,left,75.0,343.36,3193.23
+28,19,Derwent South Shore,0,Horizon Festival Site,primary_uk,left,75.0,363.25,3378.21
+29,19,Derwent South Shore,4,Lakehurst Forest,primary_uk,left,75.0,354.49,3296.78
+30,4,Lakehurst Forest,10,M68 Moorhead Roundabout,primary_uk,left,85.0,358.76,3336.48
+31,4,Lakehurst Forest,16,Ashbrook & Uffington,primary_uk,left,80.0,513.53,4775.82

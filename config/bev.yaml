@@ -1,0 +1,55 @@
+# =============================================================================
+# Bird's Eye View (BEV) / Inverse Perspective Mapping Configuration
+# Dùng cho `src/preprocessing/transform.py` (PerspectiveTransformer)
+# =============================================================================
+
+active_preset: default
+
+presets:
+  # Cấu hình chuẩn dùng chung cho pipeline (khớp mặc định trong transform.py)
+  default:
+    description: "Default trapezoidal ROI to Bird's Eye View mapping (16:9 road view)"
+    reference_width: 1280
+    reference_height: 720
+    src_ratios:
+      top_left: [0.35, 0.42]
+      top_right: [0.65, 0.42]
+      bottom_right_x: 0.98
+      bottom_left_x: 0.02
+      bottom_margin_px: 5
+    dst_ratios:
+      margin_x: 0.20
+      top_y: 0.0
+      bottom_y: 1.0
+
+  # Cấu hình tối ưu cho Forza Horizon 4 — góc nhìn Bumper Cam (cố định, không rung)
+  fh4_bumper:
+    description: "Forza Horizon 4 Bumper Camera BEV calibration (1280x720 / 1920x1080)"
+    reference_width: 1280
+    reference_height: 720
+    src_ratios:
+      top_left: [0.36, 0.44]
+      top_right: [0.64, 0.44]
+      bottom_right_x: 0.96
+      bottom_left_x: 0.04
+      bottom_margin_px: 6
+    dst_ratios:
+      margin_x: 0.22
+      top_y: 0.0
+      bottom_y: 1.0
+
+  # Cấu hình cho tập dữ liệu chuẩn TuSimple (1280x720 highway)
+  tusimple:
+    description: "TuSimple Highway Dataset BEV calibration (1280x720)"
+    reference_width: 1280
+    reference_height: 720
+    src_ratios:
+      top_left: [0.38, 0.42]
+      top_right: [0.62, 0.42]
+      bottom_right_x: 0.95
+      bottom_left_x: 0.05
+      bottom_margin_px: 5
+    dst_ratios:
+      margin_x: 0.20
+      top_y: 0.0
+      bottom_y: 1.0
