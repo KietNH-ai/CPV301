@@ -8,7 +8,10 @@ from src.preprocessing.transform import PerspectiveTransformer
 from src.preprocessing.batch_processor import (
     remove_small_blobs,
     build_uk_roi_mask,
+    extract_adaptive_lane_color_mask,
     preprocess_single_road_image,
+    load_or_build_sample_label_verification,
+    collect_labeled_road_images,
     run_batch_preprocessing,
 )
 
@@ -20,6 +23,9 @@ __all__ = [
     "PerspectiveTransformer",
     "remove_small_blobs",
     "build_uk_roi_mask",
+    "extract_adaptive_lane_color_mask",
     "preprocess_single_road_image",
+    "load_or_build_sample_label_verification",
+    "collect_labeled_road_images",
     "run_batch_preprocessing",
 ]
