@@ -128,3 +128,61 @@ def test_proposed_method_and_evaluation(tmp_path):
     assert metrics_proposed["accuracy"] >= 0.90
     assert metrics_proposed["accuracy"] > metrics_hough["accuracy"]
     assert metrics_proposed["fps"] > 0
+
+
+
+def test_tusimple_label_verification_and_clahe_conversion(tmp_path):
+    import json
+    from src.tusimple_to_yolo import (
+        convert_tusimple_to_yolo,
+        iter_labeled_tusimple_samples,
+        render_label_verification_pair,
+        parse_yolo_seg_label_file,
+    )
+    from src.preprocessing.batch_processor import preprocess_single_road_image
+
+    frame, _ = _create_synthetic_road_frame(curved=False)
+    clip_dir = tmp_path / "TUSimple" / "train_set" / "clips" / "0313-1" / "6040"
+    clip_dir.mkdir(parents=True, exist_ok=True)
+    # Create 20.jpg (labeled) and 1.jpg (unlabeled) to verify only labeled JSON frames are scanned
+    cv2.imwrite(str(clip_dir / "1.jpg"), frame)
+    cv2.imwrite(str(clip_dir / "20.jpg"), frame)
+
+    h_samples = list(range(240, 720, 10))
+    left_lane = [-2 if y < 320 else int(540 - (y - 320) * 0.7) for y in h_samples]
+    right_lane = [-2 if y < 320 else int(740 + (y - 320) * 0.7) for y in h_samples]
+    rec = {
+        "raw_file": "clips/0313-1/6040/20.jpg",
+        "h_samples": h_samples,
+        "lanes": [left_lane, right_lane],
+    }
+    label_json = tmp_path / "TUSimple" / "train_set" / "label_data_0313.json"
+    label_json.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+
+    labeled = iter_labeled_tusimple_samples(tmp_path / "TUSimple", include_test=True)
+    assert len(labeled) == 1
+    assert labeled[0][0].name == "20.jpg"
+
+    verif = render_label_verification_pair(frame, rec)
+    assert verif["json_gt_vis"].shape == frame.shape
+    assert verif["yolo_poly_vis"].shape == frame.shape
+    assert len(verif["yolo_lines"]) == 2
+    assert len(verif["decoded_polygons"]) == 2
+
+    out_dir = tmp_path / "processing"
+    stats = convert_tusimple_to_yolo(
+        tusimple_root=tmp_path / "TUSimple",
+        output_dir=out_dir,
+        val_ratio=0.0,
+        apply_preprocessing=True,
+    )
+    assert stats["train"]["imgs"] == 1
+    assert stats["train"]["polys"] == 2
+    lbl_files = list((out_dir / "train" / "labels").glob("*.txt"))
+    assert len(lbl_files) == 1
+    polys = parse_yolo_seg_label_file(lbl_files[0], img_w=1280, img_h=720)
+    assert len(polys) == 2
+
+    res = preprocess_single_road_image(frame)
+    assert res["color_pixels"] > 0
+    assert res["num_lanes"] == 2
