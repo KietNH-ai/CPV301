@@ -1,0 +1,303 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>Tài liệu Giải thích File Label TuSimple &amp; Kế hoạch Sửa lỗi Pipeline CPV301</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+  body {
+    font-family: "Times New Roman", Arial, sans-serif;
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #1f2937;
+    margin: 2cm;
+  }
+  h1 {
+    font-size: 18pt;
+    color: #1e3a8a;
+    border-bottom: 2px solid #1e3a8a;
+    padding-bottom: 6px;
+    margin-top: 12pt;
+  }
+  h2 {
+    font-size: 15pt;
+    color: #1d4ed8;
+    margin-top: 16pt;
+    margin-bottom: 6pt;
+  }
+  h3 {
+    font-size: 13pt;
+    color: #0f766e;
+    margin-top: 12pt;
+    margin-bottom: 4pt;
+  }
+  p, li {
+    font-size: 12pt;
+    margin-bottom: 6pt;
+  }
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 10.5pt;
+    background-color: #f3f4f6;
+    padding: 1px 4px;
+    color: #b91c1c;
+  }
+  pre {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 10pt;
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    padding: 10px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 8pt 0;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10pt 0;
+  }
+  th, td {
+    border: 1px solid #94a3b8;
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+    font-size: 11pt;
+  }
+  th {
+    background-color: #e0e7ff;
+    color: #1e3a8a;
+    font-weight: bold;
+  }
+  .note-box {
+    background-color: #eff6ff;
+    border-left: 4px solid #2563eb;
+    padding: 10px 14px;
+    margin: 10pt 0;
+  }
+  .warn-box {
+    background-color: #fef2f2;
+    border-left: 4px solid #dc2626;
+    padding: 10px 14px;
+    margin: 10pt 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>TÀI LIỆU GIẢI THÍCH FILE LABEL TUSIMPLE &amp; KẾ HOẠCH NÂNG CẤP PIPELINE CPV301</h1>
+<p><b>Dự án:</b> Nhận diện làn đường &amp; Tự hành CPV301 (Dataset TuSimple + YOLO11-seg + B-Spline)<br>
+<b>Ngày lập:</b> 02/11/2026<br>
+<b>Mục đích:</b> Giải thích cấu trúc File Label (ưu tiên số 1), tổng hợp các điểm nghẽn hiện tại của phần Tiền xử lý ảnh &amp; Mô hình, và danh sách công việc (Action Plan) để nhóm thực hiện sửa chữa.</p>
+
+<hr>
+
+<h2>PHẦN 1: GIẢI THÍCH CHI TIẾT VỀ FILE LABEL (ƯU TIÊN HÀNG ĐẦU)</h2>
+
+<p>Trong dự án hiện tại tồn tại <b>2 loại file label</b> ở 2 giai đoạn khác nhau:</p>
+<ol>
+  <li><b>Nhãn gốc của bộ dữ liệu TuSimple (định dạng JSON Lines <code>.json</code>)</b> nằm trong <code>data/raw/TUSimple/</code>.</li>
+  <li><b>Nhãn đã chuyển đổi sang chuẩn huấn luyện YOLO11-seg (định dạng <code>.txt</code>)</b> nằm trong <code>data/processing/train/labels/</code> và <code>data/processing/valid/labels/</code>.</li>
+</ol>
+
+<h3>1.1. File Label gốc của TuSimple (<code>data/raw/TUSimple/</code>)</h3>
+
+<table>
+  <tr>
+    <th>Tập dữ liệu</th>
+    <th>Đường dẫn File Label</th>
+    <th>Số dòng (Số ảnh có nhãn)</th>
+    <th>Ghi chú</th>
+  </tr>
+  <tr>
+    <td><b>Train Set</b></td>
+    <td>
+      <code>data/raw/TUSimple/train_set/label_data_0313.json</code><br>
+      <code>data/raw/TUSimple/train_set/label_data_0531.json</code><br>
+      <code>data/raw/TUSimple/train_set/label_data_0601.json</code>
+    </td>
+    <td>
+      2.858 dòng<br>
+      358 dòng<br>
+      410 dòng<br>
+      <b>Tổng: 3.626 ảnh có nhãn</b>
+    </td>
+    <td>Mỗi dòng JSON tương ứng với ảnh thứ 20 (<code>20.jpg</code>) của 1 clip trong <code>train_set/clips/</code>.</td>
+  </tr>
+  <tr>
+    <td><b>Test Set</b></td>
+    <td><code>data/raw/TUSimple/test_label.json</code></td>
+    <td><b>2.782 ảnh có nhãn</b></td>
+    <td>Nhãn Ground-Truth cho tập kiểm thử <code>test_set/clips/</code>.</td>
+  </tr>
+</table>
+
+<div class="note-box">
+  <b>Tại sao mỗi thư mục clip có 20 bức ảnh (<code>1.jpg</code> đến <code>20.jpg</code>) nhưng chỉ có 1 nhãn?</b><br>
+  Theo thiết kế của cuộc thi TuSimple Lane Detection Challenge, mỗi clip là một đoạn video ngắn dài 1 giây (20 khung hình liên tiếp), nhưng <b>chỉ khung hình cuối cùng (<code>20.jpg</code>) được gán nhãn (ground-truth)</b>. 19 ảnh trước đó (<code>1.jpg</code>..<code>19.jpg</code>) chỉ cung cấp thêm nếu thuật toán dùng chuỗi thời gian (video/temporal). Do đó, trong tổng số 134.571 file ảnh <code>.jpg</code> trong <code>data/raw/TUSimple</code>, có <b>6.408 bức ảnh thực sự có nhãn Ground-Truth</b> (3.626 ảnh Train + 2.782 ảnh Test).
+</div>
+
+<h4>Cấu trúc 1 dòng JSON trong <code>label_data_*.json</code>:</h4>
+<pre>{
+  "raw_file": "clips/0313-1/6040/20.jpg",
+  "h_samples": [240, 250, 260, 270, 280, ..., 700, 710],
+  "lanes": [
+    [-2, -2, -2, -2, 632, 625, 617, ..., 307, 299],
+    [-2, -2, -2, -2, 719, 734, 748, ..., -2, -2],
+    [-2, -2, -2, -2, -2, 532, 503, ..., -2, -2],
+    [-2, -2, -2, 781, 822, 862, 903, ..., -2, -2]
+  ]
+}</pre>
+
+<ul>
+  <li><b><code>raw_file</code></b>: Đường dẫn tương đối tới bức ảnh được gán nhãn (luôn là ảnh <code>20.jpg</code> của clip, độ phân giải chuẩn <code>1280 x 720</code> pixel).</li>
+  <li><b><code>h_samples</code></b>: Danh sách cố định <b>48 mốc tọa độ theo trục dọc Y (chiều cao ảnh)</b>, bắt đầu từ <code>y = 240</code> (gần đường chân trời) xuống đến <code>y = 710</code> (sát mũi xe), mỗi mốc cách nhau đúng <code>10 pixel</code>.</li>
+  <li><b><code>lanes</code></b>: Danh sách các vạch kẻ đường xuất hiện trong ảnh (thường từ 2 đến 4 hoặc tối đa 5 làn: làn trái, làn phải của xe đang đi và các làn kế bên). Mỗi mảng con bên trong <code>lanes</code> có đúng <b>48 phần tử</b>, ứng 1-1 với 48 giá trị <code>Y</code> trong <code>h_samples</code>:
+    <ul>
+      <li>Nếu giá trị là <b><code>-2</code></b>: Tại độ cao <code>Y</code> đó <b>không có vạch kẻ đường</b> (vạch kẻ chưa bắt đầu, đã kết thúc hoặc bị khuất ngoài khung hình).</li>
+      <li>Nếu giá trị <b><code>&gt;= 0</code></b>: Đó chính là <b>tọa độ ngang <code>X</code> (pixel)</b> của vạch kẻ đường tại độ cao <code>Y</code> tương ứng.<br>
+      <i>Ví dụ:</i> Ở làn đầu tiên, 4 phần tử đầu là <code>-2</code> (ứng với <code>y = 240, 250, 260, 270</code> không có vạch). Phần tử thứ 5 là <code>632</code> (ứng với <code>y = 280</code>) &rarr; điểm đầu tiên của làn đường này nằm tại tọa độ pixel <b><code>(X = 632, Y = 280)</code></b>. Tiếp theo là <code>(625, 290)</code>, <code>(617, 300)</code>,... cho tới <code>(299, 710)</code>.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>1.2. File Label sau khi chuyển sang YOLO11-seg (<code>data/processing/{train,valid}/labels/*.txt</code>)</h3>
+
+<p>Mô hình <b>YOLO11-seg</b> là mô hình <i>Instance Segmentation</i> (phân đoạn đối tượng theo vùng đa giác có diện tích), không thể học trực tiếp từ các điểm rời rạc hay đường mảnh 1 pixel. Vì vậy, file <code>src/tusimple_to_yolo.py</code> thực hiện chuyển đổi theo 3 bước:</p>
+<ol>
+  <li><b>Ghép điểm &amp; Vẽ dải làn có độ dày:</b> Với mỗi làn trong <code>lanes</code>, ghép các cặp <code>(x, y)</code> hợp lệ (<code>x &gt;= 0</code>) và dùng <code>cv2.polylines(..., thickness=12)</code> vẽ thành một dải trắng dày <code>12 pixel</code> trên nền đen (hàm <code>lane_to_polygons</code>).</li>
+  <li><b>Trích xuất đa giác bao quanh (Polygon Contour):</b> Dùng <code>cv2.findContours</code> và <code>cv2.approxPolyDP</code> để lấy các đỉnh đa giác <code>(x, y)</code> bao quanh dải làn đường vừa vẽ.</li>
+  <li><b>Chuẩn hóa về [0, 1] và ghi ra file <code>.txt</code>:</b> Chia mọi tọa độ <code>x</code> cho chiều rộng ảnh (<code>1280</code>) và chia <code>y</code> cho chiều cao ảnh (<code>720</code>) theo đúng chuẩn Ultralytics YOLO Segmentation (hàm <code>polygon_to_yolo_line</code>).</li>
+</ol>
+
+<p><b>Cấu trúc 1 dòng trong file <code>labels/*.txt</code>:</b></p>
+<pre>&lt;class_id&gt; &lt;x1&gt; &lt;y1&gt; &lt;x2&gt; &lt;y2&gt; &lt;x3&gt; &lt;y3&gt; ... &lt;xn&gt; &lt;yn&gt;</pre>
+<p><i>Ví dụ thực tế trong <code>clips_0313-1_10000_20.txt</code>:</i></p>
+<pre>0 0.504687 0.340278 0.500000 0.340278 0.161719 0.979167 0.162500 0.993056 0.167187 0.993056 0.505469 0.354167</pre>
+<ul>
+  <li>Số <b><code>0</code></b> đầu dòng là <code>class_id</code> (ứng với lớp <code>0: lane</code> trong <code>config/data.yaml</code>).</li>
+  <li>Các cặp số tiếp theo <code>(0.504687, 0.340278)</code>, <code>(0.500000, 0.340278)</code>,... là tọa độ các đỉnh đa giác đã chuẩn hóa về <code>[0, 1]</code>.</li>
+  <li>File <code>.txt</code> có 4 dòng nghĩa là bức ảnh đó có 4 vạch làn đường.</li>
+</ul>
+
+<hr>
+
+<h2>PHẦN 2: CHẨN ĐOÁN CÁC VẤN ĐỀ HIỆN TẠI TRONG CODE</h2>
+
+<h3>2.1. Vấn đề 1: Phần xử lý ảnh chỉ chạy trên 1 ảnh (hoặc một phần rất nhỏ của TuSimple)</h3>
+<ul>
+  <li><b>Tại <code>model/demo.py</code> (dòng 70–72):</b> Hàm <code>run_demo_comparison()</code> chỉ đọc <b>duy nhất 1 bức ảnh</b> (<code>data/raw/20.jpg</code>) để chạy tiền xử lý và vẽ kết quả.</li>
+  <li><b>Tại <code>notebooks/01_pre_processing.ipynb</code> và <code>src/preprocessing/batch_processor.py</code>:</b>
+    <ul>
+      <li>Phần 1 của Notebook chỉ lấy 1 ảnh mẫu (<code>image_files[9]</code>) để hiển thị 6 bước.</li>
+      <li>Phần 2 gọi <code>run_batch_preprocessing()</code> nhưng đang đặt giới hạn cứng:
+        <ul>
+          <li><code>max_highlight_images = 60</code> (chỉ chạy pipeline tiền xử lý trên 60 ảnh đầu tiên rồi dừng, bỏ qua hơn 6.300 ảnh có nhãn còn lại của TuSimple).</li>
+          <li><code>max_yolo_clips = 300</code> (chỉ chuyển đổi 300 clip sang thư mục <code>data/processing/</code> thay vì toàn bộ 3.626 clip của <code>train_set</code>).</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li><b>Tại <code>src/tusimple_to_yolo.py</code> (dòng 210):</b> Khi xuất ảnh sang <code>data/processing/{train,valid}/images/</code>, code đang dùng <code>shutil.copy2(img_path, ...)</code> &mdash; nghĩa là <b>copy nguyên bản ảnh thô từ <code>data/raw</code></b> sang <code>data/processing</code> mà chưa áp dụng bước tiền xử lý tăng cường tương phản (CLAHE) lên ảnh huấn luyện.</li>
+</ul>
+
+<h3>2.2. Vấn đề 2: Mô hình Huấn luyện &amp; Đánh giá (Evaluation) cũng chạy trên tập nhỏ / 1 ảnh</h3>
+<ul>
+  <li><b>Lỗi đánh giá trên 1 ảnh tại <code>src/evaluation/train_and_export.py</code> (dòng 193–214):</b>
+    <ul>
+      <li>Sau khi train xong, hàm <code>run_training_and_export()</code> gọi <code>demo_report = run_demo_comparison()</code> để xuất ra bảng <code>evaluation_metrics.csv</code>.</li>
+      <li>Trong <code>run_demo_comparison()</code> (<code>model/demo.py</code> dòng 123–130), việc chấm điểm <code>benchmark_detector_on_frames</code> chỉ chạy trên <b>đúng 1 bức ảnh (<code>[(frame, gt_lanes)]</code>)</b>.</li>
+      <li>Nghiêm trọng hơn, biến <code>gt_lanes</code> trong <code>demo.py</code> dòng 123 được gán bằng chính đầu ra của thuật toán (<code>gt_lanes = fitted_curves if fitted_curves else hough_masks</code>) thay vì đọc từ nhãn Ground-Truth của TuSimple! Điều này khiến <code>Proposed_Spline</code> tự so sánh với chính nó và luôn báo <code>accuracy = 1.0 (100%)</code>, <code>fp = 0.0</code>, <code>fn = 0.0</code>.</li>
+    </ul>
+  </li>
+  <li><b>Chưa đưa trọng số YOLO11-seg (<code>best.pt</code>) vào bảng chấm điểm Benchmark:</b>
+    <ul>
+      <li>Trong <code>model/demo.py</code> (dòng 127–129) và <code>src/evaluation/compare_methods.py</code> (dòng 252–254), phương pháp <code>Proposed_Spline</code> đang truyền <code>lanenet_detector</code> kết hợp với <code>spline_fitter</code>, chứ chưa thực sự đánh giá mô hình <b>YOLO11-seg + B-Spline</b> (<code>src/proposed_method/yolo_spline.py</code>) trên tập test/validation.</li>
+    </ul>
+  </li>
+  <li><b>Dữ liệu huấn luyện YOLO11-seg chưa đầy đủ:</b>
+    <ul>
+      <li>Hiện tại <code>data/processing/train</code> mới chỉ có 256 ảnh và <code>valid</code> chỉ có 60 ảnh (do giới hạn <code>max_yolo_clips=300</code>), và trong notebook mới chạy thử 2 epochs trên CPU.</li>
+    </ul>
+  </li>
+</ul>
+
+<hr>
+
+<h2>PHẦN 3: KẾ HOẠCH HÀNH ĐỘNG (CHECKLIST SỬA CODE NGÀY MAI)</h2>
+
+<table>
+  <tr>
+    <th>Bước</th>
+    <th>File cần sửa</th>
+    <th>Nội dung công việc chi tiết</th>
+  </tr>
+  <tr>
+    <td><b>Bước 1</b><br>Trực quan hóa &amp; Kiểm chứng Label</td>
+    <td><code>notebooks/01_pre_processing.ipynb</code></td>
+    <td>
+      <ul>
+        <li>Thêm 1 phần mở đầu hiển thị trực quan song song:
+          <ol>
+            <li>Ảnh gốc + các điểm <code>(x, y)</code> đọc từ <code>label_data_*.json</code> (<code>lanes</code> + <code>h_samples</code>).</li>
+            <li>Ảnh đa giác (polygon) đọc từ <code>data/processing/train/labels/*.txt</code> để cả nhóm hiểu rõ và kiểm chứng nhãn chính xác 100%.</li>
+          </ol>
+        </li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Bước 2</b><br>Chạy Tiền xử lý trên toàn bộ Dataset TuSimple</td>
+    <td>
+      <code>src/tusimple_to_yolo.py</code><br>
+      <code>src/preprocessing/batch_processor.py</code><br>
+      <code>notebooks/01_pre_processing.ipynb</code>
+    </td>
+    <td>
+      <ul>
+        <li>Bỏ giới hạn cứng <code>max_yolo_clips=300</code> và <code>max_highlight_images=60</code> (đặt mặc định <code>max_clips=None</code> để xử lý <b>toàn bộ 3.626 ảnh có nhãn trong <code>train_set</code></b>, và hỗ trợ thêm tập <code>test_set</code> 2.782 ảnh).</li>
+        <li>Thêm tùy chọn <code>apply_preprocessing=True</code> (CLAHE cân bằng sáng) khi xuất ảnh sang <code>data/processing/{train,valid}/images/</code> để mô hình học trên ảnh đã qua tiền xử lý.</li>
+        <li>Chạy đánh giá tiền xử lý trên toàn bộ các frame có nhãn của TuSimple (có thanh tiến trình <code>tqdm</code>) và lưu thống kê đầy đủ ra <code>preprocessing_metrics.csv</code>.</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td><b>Bước 3</b><br>Sửa Huấn luyện &amp; Đánh giá Mô hình trên toàn bộ tập Val/Test</td>
+    <td>
+      <code>src/evaluation/train_and_export.py</code><br>
+      <code>src/evaluation/compare_methods.py</code><br>
+      <code>model/demo.py</code><br>
+      <code>notebooks/02_train.ipynb</code>
+    </td>
+    <td>
+      <ul>
+        <li><b>Huấn luyện (Training):</b> Train YOLO11-seg trên toàn bộ tập <code>data/processing/train</code> (đã mở rộng từ toàn bộ TuSimple) với Early Stopping.</li>
+        <li><b>Đánh giá (Evaluation):</b>
+          <ul>
+            <li>Thay thế lời gọi <code>run_demo_comparison()</code> (1 ảnh) trong <code>train_and_export.py</code> bằng hàm đánh giá trên <b>toàn bộ tập Validation / Test của TuSimple</b> sử dụng nhãn Ground-Truth thật (<code>_load_processing_val_pairs</code> hoặc <code>load_tusimple_samples</code>).</li>
+            <li>Sửa nhánh đánh giá <code>Proposed_Spline</code> để sử dụng đúng mô hình <b>YOLO11-seg (<code>best.pt</code>) + <code>SplineFitter</code></b>, so sánh công bằng với <code>Hough_Transform</code> và <code>LaneNet</code>.</li>
+            <li>Xuất toàn bộ ảnh dự đoán và bảng kết quả thực tế ra <code>evaluation_metrics.csv</code> và <code>training_and_evaluation_chart.png</code>.</li>
+          </ul>
+        </li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<div class="warn-box">
+  <b>Lưu ý quan trọng khi chạy toàn bộ dataset TuSimple vào ngày mai:</b>
+  <ul>
+    <li>Không quét mù toàn bộ 134.571 file <code>.jpg</code> trong <code>clips/</code> (vì 19/20 ảnh trong mỗi clip không có nhãn Ground-Truth và trùng lặp). Hãy quét theo danh sách <code>raw_file</code> trong các file JSON (<b>3.626 ảnh <code>train_set</code> + 2.782 ảnh <code>test_set</code> = 6.408 ảnh có nhãn</b>).</li>
+    <li>Nếu train toàn bộ 3.626 ảnh trên CPU sẽ khá lâu, nên ưu tiên chạy trên máy có GPU (CUDA) hoặc bật <code>cache=True</code> / điều chỉnh <code>imgsz</code> phù hợp.</li>
+  </ul>
+</div>
+
+</body>
+</html>
