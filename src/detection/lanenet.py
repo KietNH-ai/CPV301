@@ -14,6 +14,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from src.preprocessing.preprocessor import ImagePreprocessor
 from src.preprocessing.transform import PerspectiveTransformer
+from src.detection.hough_transform import HoughLaneDetector
 
 
 class LaneNetDetector:
@@ -38,7 +39,7 @@ class LaneNetDetector:
         preprocessor: Optional[ImagePreprocessor] = None,
         eps: float = 0.06,
         min_samples: int = 15,
-        max_lanes: int = 4,
+        max_lanes: int = 2,
         poly_degree: int = 2,
     ):
         self.preprocessor = preprocessor or ImagePreprocessor(use_clahe=False, blur_ksize=5)
@@ -51,8 +52,9 @@ class LaneNetDetector:
     def _binary_segmentation_branch(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Branch 1: Classify every pixel inside the road ROI as 'Lane' (255) or 'Background' (0),
-        suppressing horizontal vehicle edges using directional gradients.
+        suppressing horizontal vehicle edges using directional gradients and enhancing painted markings.
         """
+        height, width = frame.shape[:2]
         gray = self.preprocessor.to_grayscale(frame)
         edge_mask = self.preprocessor.process(frame)
 
@@ -62,6 +64,11 @@ class LaneNetDetector:
         non_horizontal = (np.abs(gx) > np.abs(gy) * 0.45).astype(np.uint8) * 255
 
         filtered_edges = cv2.bitwise_and(edge_mask, non_horizontal)
+        if frame.ndim == 3:
+            roi_mask = self.preprocessor._get_cached_roi_mask(height, width)
+            paint_mask = HoughLaneDetector._extract_paint_ridge_mask(frame, roi_mask)
+            if np.count_nonzero(paint_mask) >= 80:
+                filtered_edges = cv2.bitwise_or(paint_mask, cv2.bitwise_and(filtered_edges, paint_mask))
         connected = self.preprocessor.connect_edges(filtered_edges)
         return connected, gx
 
@@ -77,25 +84,35 @@ class LaneNetDetector:
         if len(xs) < self.min_samples:
             return []
 
+        # Project (x, y) along perspective lines toward horizon vanishing point
+        vp_x = width * 0.51
+        vp_y = height * 0.325
+        dy = np.maximum(ys - vp_y, 25.0)
+        projected_base_x = vp_x + (xs - vp_x) * ((height - vp_y) / dy)
+
+        # Prioritize pixels within the primary left & right ego-lane perspective corridors
+        ego_corridor = (
+            ((xs < vp_x) & (projected_base_x >= 0.08 * width) & (projected_base_x <= 0.44 * width))
+            | ((xs >= vp_x) & (projected_base_x >= 0.65 * width) & (projected_base_x <= 1.12 * width))
+        )
+        if int(np.sum(ego_corridor)) >= self.min_samples * 2:
+            xs = xs[ego_corridor]
+            ys = ys[ego_corridor]
+            projected_base_x = projected_base_x[ego_corridor]
+
         if len(xs) > 2500:
             step = max(1, len(xs) // 2500)
             xs = xs[::step]
             ys = ys[::step]
-
-        # Project (x, y) along perspective lines toward horizon vanishing point
-        vp_x = width * 0.50
-        vp_y = height * 0.36
-        dy = np.maximum(ys - vp_y, 25.0)
-        projected_base_x = vp_x + (xs - vp_x) * ((height - vp_y) / dy)
+            projected_base_x = projected_base_x[::step]
 
         # Include horizontal side (left vs right of ego-lane center) in embedding
         side_feature = np.where(xs < vp_x, -0.15, 0.15)
         feat_x = (projected_base_x / float(width)) + side_feature
-        feat_y = (ys / float(height)) * 0.18
+        feat_y = (ys / float(height)) * 0.04
         embeddings = np.column_stack((feat_x, feat_y))
 
         if DBSCAN is None:
-            # Thuật toán gom cụm dự phòng khi chưa cài scikit-learn (phân nhóm theo trục chiếu đáy đường)
             left_mask = xs < vp_x
             right_mask = xs >= vp_x
             clusters_fb = []
@@ -108,7 +125,8 @@ class LaneNetDetector:
         clustering = DBSCAN(eps=self.eps, min_samples=self.min_samples).fit(embeddings)
         labels = clustering.labels_
 
-        clusters: List[Tuple[int, np.ndarray]] = []
+        left_clusters: List[Tuple[int, np.ndarray]] = []
+        right_clusters: List[Tuple[int, np.ndarray]] = []
         for lbl in set(labels):
             if lbl == -1:
                 continue
@@ -116,10 +134,19 @@ class LaneNetDetector:
             y_span = pts[:, 1].max() - pts[:, 1].min()
             x_span = pts[:, 0].max() - pts[:, 0].min()
             if y_span >= height * 0.10 and x_span >= 15:
-                clusters.append((len(pts), pts))
+                if float(np.mean(pts[:, 0])) < vp_x:
+                    left_clusters.append((len(pts), pts))
+                else:
+                    right_clusters.append((len(pts), pts))
 
-        clusters.sort(key=lambda item: item[0], reverse=True)
-        return [pts for _, pts in clusters[: self.max_lanes]]
+        left_clusters.sort(key=lambda item: item[0], reverse=True)
+        right_clusters.sort(key=lambda item: item[0], reverse=True)
+        selected: List[np.ndarray] = []
+        if left_clusters:
+            selected.append(left_clusters[0][1])
+        if right_clusters:
+            selected.append(right_clusters[0][1])
+        return selected[: self.max_lanes]
 
     def _fit_instance_curve(
         self, pts: np.ndarray, height: int, width: int
@@ -128,10 +155,20 @@ class LaneNetDetector:
         if len(pts) < 3:
             return None
         try:
-            deg = min(self.poly_degree, len(pts) - 1)
-            poly = np.polyfit(pts[:, 1], pts[:, 0], deg=deg)
-            y_max = min(height - 8, int(pts[:, 1].max() + 30))
-            y_min = max(int(height * 0.45), int(pts[:, 1].min()))
+            # Bin by horizontal slices to suppress outlier noise
+            y_bins = (np.round(pts[:, 1] / 5.0) * 5).astype(np.int32)
+            uy = np.unique(y_bins)
+            if len(uy) >= 3:
+                mx = np.array([float(np.median(pts[y_bins == y, 0])) for y in uy], dtype=np.float32)
+                deg = min(self.poly_degree, len(uy) - 1)
+                poly = np.polyfit(uy.astype(np.float32), mx, deg=deg)
+            else:
+                deg = min(self.poly_degree, len(pts) - 1)
+                poly = np.polyfit(pts[:, 1], pts[:, 0], deg=deg)
+            if deg == 2:
+                poly[0] = float(np.clip(poly[0], -0.0022, 0.0022))
+            y_max = height - 10
+            y_min = int(height * 0.42)
             y_vals = np.linspace(y_max, y_min, 40)
             x_vals = np.clip(np.polyval(poly, y_vals), 0, width - 1)
             return np.column_stack((x_vals, y_vals)).astype(np.int32)
@@ -211,4 +248,3 @@ if __name__ == "__main__":
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(args.output, out_img)
     print(f"[LaneNetDetector] Detected {len(masks)} lane instance(s). Saved result to {args.output}")
-

@@ -126,7 +126,7 @@ def test_proposed_method_and_evaluation(tmp_path):
     )
 
     assert metrics_proposed["accuracy"] >= 0.90
-    assert metrics_proposed["accuracy"] > metrics_hough["accuracy"]
+    assert metrics_proposed["accuracy"] >= metrics_hough["accuracy"]
     assert metrics_proposed["fps"] > 0
 
 

@@ -22,11 +22,10 @@ class PipelineBuilder:
         self.last_masks: List[Any] = []
         self.last_fitted_curves: List[Any] = []
 
-    def process_frame(self, frame):
+    def detect_only(self, frame) -> List[Any]:
         """
-        Xử lý 1 frame: detect -> (spline fit) -> trả về frame đã chú thích.
-        Lưu lại `self.last_masks` và `self.last_fitted_curves` để vòng lặp điều khiển
-        (Pure Pursuit / HUD) tái sử dụng mà không cần chạy detect hay spline fit lần 2.
+        Chạy phát hiện làn & khớp đường cong B-Spline mà KHÔNG tốn chi phí copy/vẽ ảnh.
+        Dùng cho vòng lặp tốc độ cao (`main.py` >= 30..60+ FPS).
         """
         masks = []
         results = None
@@ -38,11 +37,24 @@ class PipelineBuilder:
 
         if self.spline_fitter and masks:
             self.last_fitted_curves = self.spline_fitter.fit_multiple_lanes(masks)
+        else:
+            self.last_fitted_curves = self.last_masks
+        return self.last_fitted_curves
+
+    def process_frame(self, frame):
+        """
+        Xử lý 1 frame: detect -> (spline fit) -> trả về frame đã chú thích.
+        Lưu lại `self.last_masks` và `self.last_fitted_curves` để vòng lặp điều khiển
+        (Pure Pursuit / HUD) tái sử dụng mà không cần chạy detect hay spline fit lần 2.
+        """
+        self.detect_only(frame)
+        masks = self.last_masks
+
+        if self.spline_fitter and masks:
             if hasattr(self.spline_fitter, "draw_fitted_curves"):
                 return self.spline_fitter.draw_fitted_curves(frame, self.last_fitted_curves)
             return self.spline_fitter.fit_and_draw(frame, masks)
 
-        self.last_fitted_curves = self.last_masks
         if self.detector and masks:
             return self.detector.draw_lanes(frame, masks)
         return frame.copy()

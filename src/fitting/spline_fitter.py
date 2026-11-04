@@ -29,14 +29,36 @@ class SplineFitter:
     def _extract_centerline(self, points: np.ndarray, y_step: int = 4) -> np.ndarray:
         """
         Extracts a clean centerline from polygon or scattered mask coordinates.
-        Groups points by horizontal slices (y-coordinate) and averages their x-positions
-        using vectorized NumPy bincount for high-FPS real-time performance.
+        Densifies sparse polygon edges (such as `cv2.approxPolyDP` or YOLO segmentation contours)
+        before grouping points by horizontal slices (`y_step`) and averaging their x-positions.
         """
         if len(points) == 0:
             return np.empty((0, 2), dtype=np.int32)
 
-        x = points[:, 0].astype(np.float32)
-        y = points[:, 1].astype(np.float32)
+        pts = np.asarray(points, dtype=np.float32)
+        if pts.ndim == 2 and len(pts) >= 3:
+            dy = np.diff(pts[:, 1])
+            is_monotonic = bool(np.all(dy <= 0.0) or np.all(dy >= 0.0))
+            if is_monotonic and len(pts) >= 12:
+                if dy[0] > 0.0:
+                    return pts[::-1].copy()
+                return pts
+            is_closed_poly = bool(np.any(dy > 2.0) and np.any(dy < -2.0))
+            edges = list(zip(pts[:-1], pts[1:]))
+            if is_closed_poly:
+                edges.append((pts[-1], pts[0]))
+            dense_list = [pts]
+            sub_step = max(1, y_step // 2)
+            for p1, p2 in edges:
+                dist_y = abs(float(p2[1] - p1[1]))
+                n_sub = int(dist_y // sub_step)
+                if n_sub >= 2:
+                    t = np.linspace(0.0, 1.0, n_sub + 1, dtype=np.float32)[1:-1, None]
+                    dense_list.append(p1 + t * (p2 - p1))
+            pts = np.vstack(dense_list)
+
+        x = pts[:, 0].astype(np.float32)
+        y = pts[:, 1].astype(np.float32)
 
         y_binned = (np.round(y / y_step) * y_step).astype(np.int32)
         unique_y, inv_idx = np.unique(y_binned, return_inverse=True)
@@ -77,7 +99,7 @@ class SplineFitter:
         y_pts = centerline[:, 1]
         y_span = float(y_pts.max() - y_pts.min())
         x_span = float(x_pts.max() - x_pts.min())
-        if y_span < 25.0 or (x_span > 2.6 * y_span and y_span < 75.0):
+        if y_span < 16.0 or (x_span > 2.6 * y_span and y_span < 45.0):
             return None
 
         k = min(self.spline_order, n_pts - 1)

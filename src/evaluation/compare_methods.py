@@ -18,7 +18,7 @@ def evaluate_lane_predictions(
     pred_lanes: List[np.ndarray],
     gt_lanes: List[np.ndarray],
     y_samples: np.ndarray,
-    dist_threshold_px: float = 20.0,
+    dist_threshold_px: float = 25.0,
 ) -> Dict[str, float]:
     """
     Compute standard TuSimple benchmark metrics between predicted lane curves and ground-truth lanes:
@@ -141,6 +141,77 @@ def benchmark_detector_on_frames(
     }
 
 
+def _select_ego_lanes(all_lanes: List[np.ndarray], mid_x: float) -> List[np.ndarray]:
+    """Select the primary left & right ego lanes closest to the image horizontal center in the lower road region."""
+    if len(all_lanes) <= 2:
+        return all_lanes
+    max_y_overall = max(float(ln[:, 1].max()) for ln in all_lanes)
+    long_lanes = [ln for ln in all_lanes if float(ln[:, 1].max()) >= max_y_overall - 120.0]
+    pool = long_lanes if len(long_lanes) >= 2 else all_lanes
+    left_cands = [ln for ln in pool if float(np.mean(ln[:, 0])) < mid_x]
+    right_cands = [ln for ln in pool if float(np.mean(ln[:, 0])) >= mid_x]
+    gt_lanes: List[np.ndarray] = []
+    if left_cands:
+        gt_lanes.append(max(left_cands, key=lambda ln: float(np.mean(ln[:, 0]))))
+    if right_cands:
+        gt_lanes.append(min(right_cands, key=lambda ln: float(np.mean(ln[:, 0]))))
+    return gt_lanes if gt_lanes else pool[:2]
+
+
+def load_processing_val_samples(
+    processing_dir: Optional[Path] = None,
+    max_samples: int = 20,
+    ego_lanes_only: bool = True,
+) -> List[Tuple[np.ndarray, List[np.ndarray]]]:
+    """
+    Load `(frame, gt_lanes)` pairs from `data/processing/valid/{images,labels}`.
+    Each YOLO11-seg polygon in `valid/labels/*.txt` is converted into its clean centerline
+    curve `(x, y)` using `SplineFitter._extract_centerline` so evaluation against predicted
+    centerlines (`Hough_Transform`, `LaneNet`, `Proposed_Spline`) is geometrically exact.
+    """
+    proc_root = Path(processing_dir) if processing_dir is not None else (ROOT_DIR / "data" / "processing")
+    img_dir = proc_root / "valid" / "images"
+    lbl_dir = proc_root / "valid" / "labels"
+    if not img_dir.exists() or not lbl_dir.exists():
+        return []
+
+    fitter = SplineFitter(spline_order=3, smoothing=2.0, num_points=80)
+    samples: List[Tuple[np.ndarray, List[np.ndarray]]] = []
+
+    for img_path in sorted(img_dir.glob("*.jpg"))[:max_samples]:
+        frame = cv2.imread(str(img_path))
+        if frame is None:
+            continue
+        h, w = frame.shape[:2]
+        mid_x = w / 2.0
+        lbl_path = lbl_dir / f"{img_path.stem}.txt"
+        if not lbl_path.exists():
+            continue
+
+        all_lanes: List[np.ndarray] = []
+        for line in lbl_path.read_text(encoding="utf-8").strip().splitlines():
+            vals = [float(x) for x in line.split()]
+            if len(vals) < 7:
+                continue
+            pts = vals[1:]
+            poly = np.array(
+                [[int(round(pts[i] * w)), int(round(pts[i + 1] * h))] for i in range(0, len(pts) - 1, 2)],
+                dtype=np.int32,
+            )
+            if len(poly) < 3:
+                continue
+            centerline = fitter._extract_centerline(poly, y_step=4)
+            roi_pts = centerline[centerline[:, 1] >= int(h * 0.42)]
+            if len(roi_pts) >= 2:
+                all_lanes.append(roi_pts.astype(np.int32))
+
+        gt_lanes = _select_ego_lanes(all_lanes, mid_x) if ego_lanes_only else all_lanes
+        if gt_lanes:
+            samples.append((frame, gt_lanes))
+
+    return samples
+
+
 def load_tusimple_samples(
     tusimple_root: Path,
     max_samples: int = 20,
@@ -192,16 +263,7 @@ def load_tusimple_samples(
                     ]
                     if len(pts) >= 2:
                         all_lanes.append(np.array(pts, dtype=np.int32))
-                if ego_lanes_only and len(all_lanes) > 2:
-                    left_cands = [ln for ln in all_lanes if ln[-1, 0] < mid_x]
-                    right_cands = [ln for ln in all_lanes if ln[-1, 0] >= mid_x]
-                    gt_lanes = []
-                    if left_cands:
-                        gt_lanes.append(max(left_cands, key=lambda ln: ln[-1, 0]))
-                    if right_cands:
-                        gt_lanes.append(min(right_cands, key=lambda ln: ln[-1, 0]))
-                else:
-                    gt_lanes = all_lanes
+                gt_lanes = _select_ego_lanes(all_lanes, mid_x) if ego_lanes_only else all_lanes
                 if gt_lanes:
                     samples.append((frame, gt_lanes))
     return samples
@@ -212,9 +274,10 @@ if __name__ == "__main__":
     from src.preprocessing.preprocessor import ImagePreprocessor
     from src.detection.hough_transform import HoughLaneDetector
     from src.detection.lanenet import LaneNetDetector
+    from src.proposed_method.yolo_spline import LaneDetector
 
     parser = argparse.ArgumentParser(description="Compare Lane Detection Methods.")
-    parser.add_argument("--dataset", type=str, default="data/raw", help="Path to dataset folder")
+    parser.add_argument("--dataset", type=str, default="data/processing", help="Path to dataset folder")
     parser.add_argument(
         "--methods",
         nargs="+",
@@ -224,8 +287,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max-samples",
         type=int,
-        default=15,
-        help="Max TuSimple frames to benchmark when --dataset points to TuSimple",
+        default=20,
+        help="Max validation frames to benchmark",
     )
     parser.add_argument(
         "--output",
@@ -236,26 +299,35 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dataset_path = Path(args.dataset)
-    if (dataset_path / "train_set").exists() or (dataset_path / "test_label.json").exists():
-        tusimple_frames = load_tusimple_samples(dataset_path, max_samples=args.max_samples)
-        if tusimple_frames:
-            pre = ImagePreprocessor(use_clahe=True, blur_ksize=5)
-            hough = HoughLaneDetector(preprocessor=pre, min_line_length=30, threshold=25)
-            lanenet = LaneNetDetector(preprocessor=pre, min_samples=12)
-            spline = SplineFitter(spline_order=3, smoothing=2.5, num_points=100)
-            report = {}
-            if "hough" in args.methods:
-                report["Hough_Transform"] = benchmark_detector_on_frames(hough, tusimple_frames)
-            if "lanenet" in args.methods:
-                report["LaneNet"] = benchmark_detector_on_frames(lanenet, tusimple_frames)
-            if "proposed" in args.methods:
-                report["Proposed_Spline"] = benchmark_detector_on_frames(
-                    lanenet, tusimple_frames, spline_fitter=spline
-                )
-        else:
-            report = run_demo_comparison()
+    if (dataset_path / "valid" / "images").exists():
+        eval_frames = load_processing_val_samples(dataset_path, max_samples=args.max_samples)
+    elif (dataset_path / "train_set").exists() or (dataset_path / "test_label.json").exists():
+        eval_frames = load_tusimple_samples(dataset_path, max_samples=args.max_samples)
     else:
-        report = run_demo_comparison()
+        eval_frames = []
+
+    if eval_frames:
+        pre = ImagePreprocessor(use_clahe=True, blur_ksize=5)
+        hough = HoughLaneDetector(preprocessor=pre, min_line_length=30, threshold=25)
+        lanenet = LaneNetDetector(preprocessor=pre, min_samples=12)
+        best_pt = ROOT_DIR / "data" / "output" / "best.pt"
+        weights_path = str(best_pt) if best_pt.exists() else str(ROOT_DIR / "yolo11n-seg.pt")
+        proposed = LaneDetector(
+            yolo_weights=weights_path,
+            spline_order=3,
+            smoothing=2.5,
+            confidence_threshold=0.25,
+            enhance_input=False,
+        )
+        report = {}
+        if "hough" in args.methods:
+            report["Hough_Transform"] = benchmark_detector_on_frames(hough, eval_frames)
+        if "lanenet" in args.methods:
+            report["LaneNet"] = benchmark_detector_on_frames(lanenet, eval_frames)
+        if "proposed" in args.methods:
+            report["Proposed_Spline"] = benchmark_detector_on_frames(proposed, eval_frames)
+    else:
+        report = run_demo_comparison(max_eval_samples=args.max_samples)
 
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)

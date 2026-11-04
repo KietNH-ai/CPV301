@@ -99,10 +99,10 @@ class HoughConfig:
     # Truyền `preprocessor=...` qua detector_cfg nếu muốn dùng riêng.
     rho: float = 1.0
     theta: float = 0.01745  # ~np.pi/180
-    threshold: int = 40
-    min_line_length: int = 40
-    max_line_gap: int = 50
-    min_abs_slope: float = 0.3
+    threshold: int = 32
+    min_line_length: int = 28
+    max_line_gap: int = 55
+    min_abs_slope: float = 0.35
     group_left_right: bool = True
 
 
@@ -196,7 +196,7 @@ class ProposedDetectorAdapter:
     def detect(self, frame):
         result = self._detector.detect_frame(frame)
         self._last_annotated = result.annotated_frame
-        return result, result.raw_masks
+        return result, (result.fitted_curves if result.fitted_curves else result.raw_masks)
 
     def draw_lanes(self, frame, lane_masks):
         if self._last_annotated is not None:

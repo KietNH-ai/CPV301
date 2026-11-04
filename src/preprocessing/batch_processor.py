@@ -21,12 +21,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 import cv2
-<<<<<<< HEAD
-import matplotlib.pyplot as plt
-=======
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
->>>>>>> 500ca77ce0c2ce178cb43db4bfe404b777a15902
 import numpy as np
 
 try:

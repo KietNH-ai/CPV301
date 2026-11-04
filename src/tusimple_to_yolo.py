@@ -437,6 +437,13 @@ def convert_tusimple_to_yolo(
 
             stem = cid.replace("/", "_").replace("\\", "_")
             out_name = f"{stem}_{img_path.stem}"
+            other_split = "train" if split == "valid" else "valid"
+            for stale_path in (
+                out / other_split / "images" / f"{out_name}.jpg",
+                out / other_split / "labels" / f"{out_name}.txt",
+            ):
+                if stale_path.exists():
+                    stale_path.unlink()
             dst_img_path = out / split / "images" / f"{out_name}.jpg"
 
             if apply_preprocessing:

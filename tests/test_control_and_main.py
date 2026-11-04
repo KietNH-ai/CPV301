@@ -43,15 +43,15 @@ from src import (
     FH4_MAP_RAW_DIR,
     FH4_MAP_PROCESSING_DIR,
 )
-from src.pipelinebuilder import PipelineBuilder as LegacyPipelineBuilder
+from src.pipeline_builder import PipelineBuilder as DirectPipelineBuilder
 from src.preprocessing.batch_processor import preprocess_single_road_image
 from src.tusimple_to_yolo import lane_to_polygons, polygon_to_yolo_line
 from main import parse_args, run_pipeline_loop
 
 
-def test_pipelinebuilder_legacy_import():
-    """Ensure `from src.pipelinebuilder import PipelineBuilder` matches `src.pipeline_builder`."""
-    assert LegacyPipelineBuilder is PipelineBuilder
+def test_pipeline_builder_import():
+    """Ensure `from src.pipeline_builder import PipelineBuilder` matches `src.PipelineBuilder`."""
+    assert DirectPipelineBuilder is PipelineBuilder
 
 
 def test_bev_yaml_and_perspective_transformer():

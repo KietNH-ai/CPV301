@@ -1,0 +1,27 @@
+# =============================================================================
+# requirements(testFH4).txt — Môi trường ĐẦY ĐỦ để chạy song song thời gian thực
+#                             với game Forza Horizon 4 (Windows, Bumper Cam)
+#
+# Cài đặt:
+#     pip install -r "requirements(testFH4).txt"
+#
+# Yêu cầu bổ sung khi điều khiển xe trong Forza Horizon 4 (Windows):
+#   1. Cài đặt trình điều khiển tay cầm ảo ViGEmBus (do vgamepad tự động cài
+#      hoặc tải từ https://github.com/nefarius/ViGEmBus/releases).
+#   2. Trong Forza Horizon 4 -> Settings -> HUD and Gameplay:
+#      - Data Out: ON
+#      - Data Out IP Address: 127.0.0.1
+#      - Data Out IP Port: 5300
+# =============================================================================
+
+# ------- Kế thừa toàn bộ thư viện cốt lõi từ requirements.txt -------
+-r requirements.txt
+
+# ------- Chụp màn hình thời gian thực & Giám sát hiệu năng FH4 -------
+mss>=9.0.0                                     # chụp vùng cửa sổ game tốc độ cao (>= 60 FPS)
+psutil>=5.9.0                                  # giám sát tài nguyên CPU/RAM & FPS thời gian thực
+
+# ------- Điều khiển xe tự hành song song với Forza Horizon 4 (Windows) -------
+vgamepad>=0.1.0; sys_platform == "win32"       # giả lập tay cầm Xbox 360 ảo (Analog Steer / Trigger)
+pydirectinput>=1.0.4; sys_platform == "win32"  # fallback điều khiển bàn phím DirectInput (W/A/S/D)
+keyboard>=0.13.5; sys_platform == "win32"      # phím nóng khẩn cấp / điều khiển bổ trợ

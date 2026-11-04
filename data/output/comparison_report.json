@@ -1,20 +1,20 @@
 {
   "Hough_Transform": {
-    "accuracy": 0.95,
-    "fp": 0.0,
-    "fn": 0.0,
-    "fps": 28.83
+    "accuracy": 0.4706,
+    "fp": 0.5833,
+    "fn": 0.5833,
+    "fps": 10.93
   },
   "LaneNet": {
-    "accuracy": 1.0,
-    "fp": 0.0,
-    "fn": 0.0,
-    "fps": 8.21
+    "accuracy": 0.2495,
+    "fp": 0.8833,
+    "fn": 0.8833,
+    "fps": 13.99
   },
   "Proposed_Spline": {
-    "accuracy": 1.0,
-    "fp": 0.0,
-    "fn": 0.0,
-    "fps": 9.39
+    "accuracy": 0.8872,
+    "fp": 0.1,
+    "fn": 0.1,
+    "fps": 27.66
   }
 }

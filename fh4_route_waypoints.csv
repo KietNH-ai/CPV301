@@ -1,5 +1,7 @@
 step,node_id,label,x_px,y_px,world_x,world_z,road_class,uk_lane,uk_instruction,heading_rad,target_speed_kmh,cumulative_distance_m
-0,9,M68 Astmoor Interchange,1007,713,3231.15,-1912.35,motorway,left_lane_uk,KEEP_LEFT_LANE_UK,-0.56564,180.0,2510.6
-1,10,M68 Moorhead Roundabout,781,357,1129.35,1398.45,primary_uk,left_lane_uk,ROUNDABOUT_CLOCKWISE_KEEP_LEFT,0.3727,90.0,6614.7
-2,11,Edinburgh West Gate,833,224,1612.95,2635.35,primary_uk,left_lane_uk,TURN_RIGHT_CROSS_TRAFFIC_TO_UK_LEFT_LANE,0.92215,65.0,8063.6
-3,12,Edinburgh City Centre,895,177,2189.55,3072.45,primary_uk,left_lane_uk,ARRIVED_PULL_OVER_LEFT,0.92215,0.0,8844.5
+0,0,Horizon Festival Site,354,994,-2841.75,-4525.65,primary_uk,left_lane_uk,ROUNDABOUT_CLOCKWISE_KEEP_LEFT,1.81577,85.0,0.0
+1,16,Ashbrook & Uffington,682,1076,208.65,-5288.25,primary_uk,left_lane_uk,TURN_LEFT_INTO_UK_LEFT_LANE,1.22552,90.0,3144.3
+2,8,M68 South Roundabout,935,985,2561.55,-4441.95,motorway,left_lane_uk,ROUNDABOUT_CLOCKWISE_KEEP_LEFT,0.25877,180.0,5644.8
+3,9,M68 Astmoor Interchange,1007,713,3231.15,-1912.35,motorway,left_lane_uk,TURN_LEFT_INTO_UK_LEFT_LANE,-0.56564,180.0,8261.5
+4,10,M68 Moorhead Roundabout,781,357,1129.35,1398.45,primary_uk,left_lane_uk,ROUNDABOUT_CLOCKWISE_KEEP_LEFT,0.3727,90.0,12183.1
+5,11,Edinburgh West Gate,833,224,1612.95,2635.35,primary_uk,left_lane_uk,ARRIVED_PULL_OVER_LEFT,0.3727,0.0,13511.2

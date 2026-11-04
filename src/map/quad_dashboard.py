@@ -618,19 +618,21 @@ class FH4QuadDashboard:
         sx = self.quad_w / float(max(1, orig_w))
         sy = self.quad_h / float(max(1, orig_h))
 
-        # 1. Vẽ khung vùng quan tâm Polygon ROI trên Ô 2
-        roi_pts = np.array(
-            [
+        # 1. Vẽ khung vùng quan tâm Polygon ROI trên Ô 2 (khớp với ImagePreprocessor)
+        if getattr(self, "_cached_quad_roi_shape", None) != (self.quad_h, self.quad_w):
+            self._cached_quad_roi_pts = np.array(
                 [
-                    (int(self.quad_w * 0.05), self.quad_h - 28),
-                    (int(self.quad_w * 0.28), int(self.quad_h * 0.38)),
-                    (int(self.quad_w * 0.72), int(self.quad_h * 0.38)),
-                    (int(self.quad_w * 0.98), self.quad_h - 28),
-                ]
-            ],
-            dtype=np.int32,
-        )
-        cv2.polylines(tile, roi_pts, True, (180, 120, 60), 1, cv2.LINE_AA)
+                    [
+                        (int(self.quad_w * 0.02), self.quad_h - 14),
+                        (int(self.quad_w * 0.35), int(self.quad_h * 0.42)),
+                        (int(self.quad_w * 0.65), int(self.quad_h * 0.42)),
+                        (int(self.quad_w * 0.98), self.quad_h - 14),
+                    ]
+                ],
+                dtype=np.int32,
+            )
+            self._cached_quad_roi_shape = (self.quad_h, self.quad_w)
+        cv2.polylines(tile, self._cached_quad_roi_pts, True, (180, 120, 60), 1, cv2.LINE_AA)
 
         # 2. Tô màu hành lang làn đường bên trái UK và vẽ các đường cong B-Spline đã phân loại
         labeled = getattr(path_data, "classified_lanes", None) or {}
@@ -685,36 +687,46 @@ class FH4QuadDashboard:
         # 4. Đính kèm cửa sổ thu nhỏ (PiP) hiển thị Mặt nạ Biên ROI (ROI Lane & Edge Mask) ở góc trên trái Ô 2
         pip_w = max(130, int(self.quad_w * 0.23))
         pip_h = max(78, int(self.quad_h * 0.21))
-        small_bgr = cv2.resize(tile, (pip_w, pip_h), interpolation=cv2.INTER_NEAREST)
-        small_gray = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY)
-        if getattr(self, "_cached_pip_roi_shape", None) != (pip_h, pip_w):
-            self._cached_pip_roi_pts = np.array(
-                [
+        self._pip_tick = getattr(self, "_pip_tick", 0) + 1
+        if (
+            getattr(self, "_cached_pip_bgr", None) is None
+            or self._cached_pip_bgr.shape[:2] != (pip_h, pip_w)
+            or (self._pip_tick % 5 == 1)
+        ):
+            small_bgr = cv2.resize(tile, (pip_w, pip_h), interpolation=cv2.INTER_NEAREST)
+            small_gray = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY)
+            if getattr(self, "_cached_pip_roi_shape", None) != (pip_h, pip_w):
+                self._cached_pip_roi_pts = np.array(
                     [
-                        (int(pip_w * 0.05), pip_h - 3),
-                        (int(pip_w * 0.28), int(pip_h * 0.38)),
-                        (int(pip_w * 0.72), int(pip_h * 0.38)),
-                        (int(pip_w * 0.98), pip_h - 3),
-                    ]
-                ],
-                dtype=np.int32,
-            )
-            mask = np.zeros((pip_h, pip_w), dtype=np.uint8)
-            cv2.fillPoly(mask, self._cached_pip_roi_pts, 255)
-            self._cached_pip_roi_mask = mask
-            self._cached_pip_roi_shape = (pip_h, pip_w)
+                        [
+                            (int(pip_w * 0.02), pip_h - 3),
+                            (int(pip_w * 0.35), int(pip_h * 0.42)),
+                            (int(pip_w * 0.65), int(pip_h * 0.42)),
+                            (int(pip_w * 0.98), pip_h - 3),
+                        ]
+                    ],
+                    dtype=np.int32,
+                )
+                mask = np.zeros((pip_h, pip_w), dtype=np.uint8)
+                cv2.fillPoly(mask, self._cached_pip_roi_pts, 255)
+                self._cached_pip_roi_mask = mask
+                self._cached_pip_roi_shape = (pip_h, pip_w)
 
-        small_roi_mask = self._cached_pip_roi_mask
-        small_edges = cv2.bitwise_and(cv2.Canny(small_gray, 50, 140), small_roi_mask)
-        small_ridge = cv2.subtract(small_gray, cv2.boxFilter(small_gray, cv2.CV_8U, (15, 5)))
-        small_paint = cv2.bitwise_and(
-            np.where((small_ridge >= 12) & (small_gray >= 110), np.uint8(255), np.uint8(0)),
-            small_roi_mask,
-        )
-        pip_bgr = np.full((pip_h, pip_w, 3), (14, 18, 22), dtype=np.uint8)
-        cv2.polylines(pip_bgr, self._cached_pip_roi_pts, True, (90, 70, 45), 1, cv2.LINE_AA)
-        pip_bgr[small_edges > 0] = (180, 160, 0)
-        pip_bgr[small_paint > 0] = (0, 255, 180)
+            small_roi_mask = self._cached_pip_roi_mask
+            small_edges = cv2.bitwise_and(cv2.Canny(small_gray, 50, 140), small_roi_mask)
+            pip_kw = max(5, int(round(pip_w * 0.028)) | 1)
+            small_ridge = cv2.subtract(small_gray, cv2.boxFilter(small_gray, cv2.CV_8U, (pip_kw, 3)))
+            small_paint = cv2.bitwise_and(
+                np.where((small_ridge >= 12) & (small_gray >= 115), np.uint8(255), np.uint8(0)),
+                small_roi_mask,
+            )
+            pip_bgr = np.full((pip_h, pip_w, 3), (14, 18, 22), dtype=np.uint8)
+            cv2.polylines(pip_bgr, self._cached_pip_roi_pts, True, (90, 70, 45), 1, cv2.LINE_AA)
+            pip_bgr[small_edges > 0] = (180, 160, 0)
+            pip_bgr[small_paint > 0] = (0, 255, 180)
+            self._cached_pip_bgr = pip_bgr
+
+        pip_bgr = self._cached_pip_bgr.copy()
         # Vẽ luôn 2 biên làn phát hiện được lên PiP để dễ đối chiếu
         pip_sx = pip_w / float(max(1, self.quad_w))
         pip_sy = pip_h / float(max(1, self.quad_h))

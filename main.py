@@ -47,6 +47,7 @@ from model.model_config import build_pipeline, GENERAL  # noqa: E402
 from src.capture import ScreenCapture, get_screen_quadrant_geometry  # noqa: E402
 from src.map import FH4MapNavigator, FH4QuadDashboard  # noqa: E402
 from src.control import (  # noqa: E402
+    classify_uk_lanes,
     extract_path_from_lanes,
     PurePursuitController,
     PIDSpeedController,
@@ -54,15 +55,16 @@ from src.control import (  # noqa: E402
     TelemetryReceiver,
     PathData,
 )
+from src.control.pure_pursuit import _interp_lane_x  # noqa: E402
 
 
 class _AsyncCurveDetector:
     """
-    Bộ chạy phát hiện làn đường tốc độ cao đảm bảo tốc độ vòng lặp chính luôn >= 30 FPS:
-      - Với `hough` / `lanenet`: chạy phát hiện trên ảnh thu phóng tối ưu (640px) rồi phóng tọa độ
-        về khung hình gốc, chỉ mất ~2ms/frame (> 100 FPS).
-      - Với `yolo` / `proposed` khi chạy thời gian thực: sử dụng luồng nền (background worker thread)
-        để cập nhật các đường cong B-Spline liên tục mà không bao giờ làm nghẽn giao diện 4 ô.
+    Bộ chạy phát hiện làn đường tốc độ cao kết hợp Bộ ổn định quỹ đạo theo thời gian (Temporal EMA + Coasting):
+      - Với `hough` / `lanenet`: chạy `detect_only` trên ảnh thu phóng tối ưu (560px) không tốn chi phí copy ảnh.
+      - Với `yolo` / `proposed` khi chạy thời gian thực: sử dụng luồng nền (background worker thread).
+      - Tích hợp bộ lọc EMA theo thời gian, cổng chặn nhiễu nhảy vọt (Outlier Gate) và giữ làn ngắn hạn
+        (Short-Term Coasting 10 frames) giúp vạch đường bám đằm qua đoạn vạch đứt nét hoặc bóng cây.
     """
 
     def __init__(self, pipeline: Any, detector_name: str, use_async_thread: bool = False):
@@ -76,20 +78,143 @@ class _AsyncCurveDetector:
         self._initialized = False
         self._thread: Optional[threading.Thread] = None
 
+        # Trạng thái bộ lọc làm mượt theo thời gian (Temporal EMA State)
+        self._state_shape: Optional[Tuple[int, int]] = None
+        self._y_grid: Optional[np.ndarray] = None
+        self._min_sep_profile: Optional[np.ndarray] = None
+        self._ema_width_profile: Optional[np.ndarray] = None
+        self._ema_left_x: Optional[np.ndarray] = None
+        self._ema_right_x: Optional[np.ndarray] = None
+        self._miss_left: int = 0
+        self._miss_right: int = 0
+        self._outlier_left: int = 0
+        self._outlier_right: int = 0
+
         if self.use_async_thread:
             self._running = True
             self._thread = threading.Thread(target=self._worker_loop, daemon=True)
             self._thread.start()
 
+    def _ensure_temporal_grid(self, h: int, w: int) -> None:
+        if self._state_shape == (h, w) and self._y_grid is not None:
+            return
+        y_bot = float(h - max(10, int(h * 0.025)))
+        y_top = float(int(h * 0.43))
+        y_grid = np.linspace(y_bot, y_top, 28, dtype=np.float32)
+        y_vanish = float(h) * 0.33
+        p_y = np.clip((y_grid - y_vanish) / max(1.0, y_bot - y_vanish), 0.12, 1.0) ** 0.92
+        self._state_shape = (h, w)
+        self._y_grid = y_grid
+        self._min_sep_profile = float(w) * (0.06 + 0.22 * p_y)
+        self._ema_width_profile = float(w) * (0.09 + 0.44 * p_y)
+        self._ema_left_x = None
+        self._ema_right_x = None
+        self._miss_left = 0
+        self._miss_right = 0
+        self._outlier_left = 0
+        self._outlier_right = 0
+
+    def _stabilize_curves(self, raw_curves: List[np.ndarray], frame_shape: Tuple[int, ...]) -> List[np.ndarray]:
+        h, w = int(frame_shape[0]), int(frame_shape[1])
+        if not raw_curves:
+            # Khi phía trước không có đường, lập tức xóa trạng thái cũ, KHÔNG sinh vạch ảo
+            self._ema_left_x = None
+            self._ema_right_x = None
+            self._miss_left = 999
+            self._miss_right = 999
+            return []
+
+        self._ensure_temporal_grid(h, w)
+        y_grid = self._y_grid
+        assert y_grid is not None and self._ema_width_profile is not None and self._min_sep_profile is not None
+
+        uk_info = classify_uk_lanes(raw_curves, (h, w))
+        left_cand = uk_info.get("left_boundary")
+        right_cand = uk_info.get("right_boundary")
+
+        x_left_obs = _interp_lane_x(left_cand, y_grid) if (left_cand is not None and len(left_cand) >= 2) else None
+        x_right_obs = _interp_lane_x(right_cand, y_grid) if (right_cand is not None and len(right_cand) >= 2) else None
+        if x_left_obs is not None and np.any(np.isnan(x_left_obs)):
+            x_left_obs = None
+        if x_right_obs is not None and np.any(np.isnan(x_right_obs)):
+            x_right_obs = None
+
+        if x_left_obs is None and x_right_obs is None:
+            self._ema_left_x = None
+            self._ema_right_x = None
+            return []
+
+        jump_gate = 0.11 * float(w)
+
+        # 1. Cập nhật EMA cho biên làn trái thực sự được phát hiện
+        if x_left_obs is not None:
+            if self._ema_left_x is None:
+                self._ema_left_x = x_left_obs.copy()
+                self._outlier_left = 0
+            else:
+                jump_l = float(np.median(np.abs(x_left_obs - self._ema_left_x)))
+                alpha_l = 0.14 if (jump_l > jump_gate and self._outlier_left < 3) else 0.40
+                self._outlier_left = (self._outlier_left + 1) if (jump_l > jump_gate and self._outlier_left < 3) else 0
+                self._ema_left_x = alpha_l * x_left_obs + (1.0 - alpha_l) * self._ema_left_x
+            self._miss_left = 0
+        else:
+            self._miss_left += 1
+            if self._miss_left > 2:
+                self._ema_left_x = None
+
+        # 2. Cập nhật EMA cho biên làn phải thực sự được phát hiện
+        if x_right_obs is not None:
+            if self._ema_right_x is None:
+                self._ema_right_x = x_right_obs.copy()
+                self._outlier_right = 0
+            else:
+                jump_r = float(np.median(np.abs(x_right_obs - self._ema_right_x)))
+                alpha_r = 0.14 if (jump_r > jump_gate and self._outlier_right < 3) else 0.40
+                self._outlier_right = (self._outlier_right + 1) if (jump_r > jump_gate and self._outlier_right < 3) else 0
+                self._ema_right_x = alpha_r * x_right_obs + (1.0 - alpha_r) * self._ema_right_x
+            self._miss_right = 0
+        else:
+            self._miss_right += 1
+            if self._miss_right > 2:
+                self._ema_right_x = None
+
+        # 3. Học bề rộng làn theo phối cảnh khi thấy rõ cả 2 biên thực tế
+        if x_left_obs is not None and x_right_obs is not None and self._ema_left_x is not None and self._ema_right_x is not None:
+            sep = self._ema_right_x - self._ema_left_x
+            if float(np.median(sep)) >= 0.14 * float(w):
+                clamped_sep = np.clip(sep, self._min_sep_profile, float(w) * 0.72)
+                self._ema_width_profile = 0.25 * clamped_sep + 0.75 * self._ema_width_profile
+
+        # 4. CHỈ xuất các vạch thực sự đang hiện diện (KHÔNG vẽ vạch ảo khi thiếu bên kia)
+        stabilized: List[np.ndarray] = []
+        if x_left_obs is not None and x_right_obs is not None and self._ema_left_x is not None and self._ema_right_x is not None:
+            mid_pair = 0.5 * (self._ema_left_x + self._ema_right_x)
+            cur_sep = np.maximum(self._min_sep_profile, self._ema_right_x - self._ema_left_x)
+            l_x = np.clip(mid_pair - 0.5 * cur_sep, 4.0, float(w - 8))
+            r_x = np.clip(mid_pair + 0.5 * cur_sep, l_x + self._min_sep_profile, float(w - 2))
+            self._ema_left_x = l_x
+            self._ema_right_x = r_x
+            stabilized.append(np.column_stack((l_x, y_grid)).astype(np.int32))
+            stabilized.append(np.column_stack((r_x, y_grid)).astype(np.int32))
+        elif x_left_obs is not None and self._ema_left_x is not None:
+            l_x = np.clip(self._ema_left_x, 4.0, float(w - 4))
+            stabilized.append(np.column_stack((l_x, y_grid)).astype(np.int32))
+        elif x_right_obs is not None and self._ema_right_x is not None:
+            r_x = np.clip(self._ema_right_x, 4.0, float(w - 4))
+            stabilized.append(np.column_stack((r_x, y_grid)).astype(np.int32))
+
+        return stabilized
+
     def _detect_scaled(self, frame: np.ndarray) -> List[np.ndarray]:
         h, w = frame.shape[:2]
-        target_w = 480 if self.detector_name in ("hough", "lanenet") else 360
+        target_w = 560 if self.detector_name in ("hough", "lanenet") else 480
+        run_fn = getattr(self.pipeline, "detect_only", self.pipeline.process_frame)
         if w > target_w:
             scale = target_w / float(w)
             small_w = target_w
-            small_h = max(120, int(round(h * scale)))
+            small_h = max(140, int(round(h * scale)))
             small_frame = cv2.resize(frame, (small_w, small_h), interpolation=cv2.INTER_LINEAR)
-            self.pipeline.process_frame(small_frame)
+            run_fn(small_frame)
             raw_curves = self.pipeline.last_fitted_curves or self.pipeline.last_masks or []
             inv_x = w / float(small_w)
             inv_y = h / float(small_h)
@@ -102,7 +227,7 @@ class _AsyncCurveDetector:
                     scaled_curves.append(arr.astype(np.int32))
             return scaled_curves
 
-        self.pipeline.process_frame(frame)
+        run_fn(frame)
         return list(self.pipeline.last_fitted_curves or self.pipeline.last_masks or [])
 
     def _worker_loop(self) -> None:
@@ -116,36 +241,33 @@ class _AsyncCurveDetector:
                 time.sleep(0.003)
                 continue
             try:
-                curves = self._detect_scaled(frame_to_run)
+                raw_curves = self._detect_scaled(frame_to_run)
                 with self._lock:
-                    self._latest_curves = curves
+                    self._latest_curves = self._stabilize_curves(raw_curves, frame_to_run.shape)
             except Exception:
                 pass
 
     def process(self, frame: np.ndarray) -> Tuple[np.ndarray, List[np.ndarray]]:
         if not self.use_async_thread:
-            curves = self._detect_scaled(frame)
+            raw_curves = self._detect_scaled(frame)
+            curves = self._stabilize_curves(raw_curves, frame.shape)
         else:
-            # Chỉ chạy đồng bộ DUY NHẤT 1 lần ở frame đầu tiên. Trước đây điều kiện
-            # `not self._latest_curves` làm mọi frame có 0 làn (YOLO trả về []) đều chạy
-            # suy luận đồng bộ trên luồng giao diện -> tụt còn ~6 FPS.
+            # Chỉ chạy đồng bộ DUY NHẤT 1 lần ở frame đầu tiên.
             run_sync = False
             with self._lock:
                 if not self._initialized:
                     self._initialized = True
                     run_sync = True
                 else:
-                    self._latest_frame = frame.copy()
+                    self._latest_frame = frame
                     curves = list(self._latest_curves)
             if run_sync:
-                curves = self._detect_scaled(frame)
+                raw_curves = self._detect_scaled(frame)
+                curves = self._stabilize_curves(raw_curves, frame.shape)
                 with self._lock:
                     self._latest_curves = curves
 
-        annotated = frame.copy()
-        if curves:
-            cv2.polylines(annotated, curves, isClosed=False, color=(0, 255, 0), thickness=3, lineType=cv2.LINE_AA)
-        return annotated, curves
+        return frame, curves
 
     def stop(self) -> None:
         self._running = False
@@ -368,7 +490,7 @@ def run_pipeline_loop(args: argparse.Namespace) -> dict:
 
     print(f"Đang khởi tạo pipeline ({args.detector}) trên thiết bị: {GENERAL.default_device}...")
     pipeline = build_pipeline(args.detector, detector_cfg=detector_cfg)
-    use_async = args.detector in ("yolo", "proposed") and (args.max_frames is None or args.max_frames > 15)
+    use_async = args.max_frames is None or args.max_frames > 15
     fast_detector = _AsyncCurveDetector(pipeline, args.detector, use_async_thread=use_async)
 
     preview_pursuit = PurePursuitController()
@@ -469,24 +591,11 @@ def run_pipeline_loop(args: argparse.Namespace) -> dict:
             else:
                 frame = screen_cap.grab()
 
-            # 1. Phát hiện làn & khớp đường cong B-Spline tốc độ cao
+            # 1. Phát hiện làn & khớp đường cong B-Spline tốc độ cao (kèm bộ lọc ổn định EMA)
             annotated, curves = fast_detector.process(frame)
             n_lanes = len(curves)
 
-            waypoints = route_info["waypoints"]
-            wp_idx = min(len(waypoints) - 1, (frame_count // 15) % max(1, len(waypoints)))
-            active_wp = waypoints[wp_idx]
-            map_turn_hint = active_wp["uk_instruction"]
-
-            # 2. Rút trích quỹ đạo lái chuẩn Anh Quốc (UK Left-Hand Traffic)
-            path_data = extract_path_from_lanes(
-                curves,
-                frame.shape,
-                driving_side="uk_left",
-                map_turn_hint=map_turn_hint,
-            )
-
-            # 3. Đọc Telemetry & Tính toán lệnh điều khiển
+            # 2. Đọc Telemetry (nếu có kết nối UDP từ game FH4) để cập nhật vị trí thực tế trên bản đồ
             telemetry_pkt = None
             if receiver is not None:
                 pkt, is_fresh, _ = receiver.get_latest()
@@ -501,6 +610,20 @@ def run_pipeline_loop(args: argparse.Namespace) -> dict:
                             dashboard.refresh_route_cache()
                             if dashboard.on_route_changed is not None:
                                 dashboard.on_route_changed(new_rt)
+
+            waypoints = route_info["waypoints"]
+            wp_idx = min(len(waypoints) - 1, (frame_count // 15) % max(1, len(waypoints)))
+            active_wp = waypoints[wp_idx]
+            map_turn_hint = active_wp["uk_instruction"]
+
+            # 3. Rút trích quỹ đạo lái chuẩn Anh Quốc (UK Left-Hand Traffic)
+            # Chỉ dịch điểm nhìn theo chỉ dẫn rẽ khi có Telemetry GPS thực tế từ game
+            path_data = extract_path_from_lanes(
+                curves,
+                frame.shape,
+                driving_side="uk_left",
+                map_turn_hint=map_turn_hint if telemetry_pkt is not None else None,
+            )
 
             if controller is not None:
                 controller.update_path(path_data)
